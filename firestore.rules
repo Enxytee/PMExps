@@ -6,6 +6,19 @@ rules_version = '2';
 // Posture: deny by default. Nothing is readable or writable unless a rule
 // below explicitly allows it.
 //
+// ARCHITECTURE NOTE — no Cloud Functions.
+// This project runs on the Spark (free) plan, so there is no trusted server
+// process. Balance-affecting operations are therefore performed as Firestore
+// TRANSACTIONS from the client, and the invariants that a Cloud Function
+// would have enforced are enforced here instead, using getAfter() to inspect
+// the post-commit state of sibling documents.
+//
+// The security property is preserved: a client may submit a transaction, but
+// Firestore rejects the entire commit unless every document in it satisfies
+// these rules together. A tampered browser cannot allocate a voucher number
+// out of sequence, confirm an entry without incrementing the counter, or
+// write one half of a transfer.
+//
 // Three things are true of every financial write path here:
 //   1. Authentication alone grants nothing. Access requires an ACTIVE member
 //      document at workspaces/{wid}/members/{uid}.
@@ -141,6 +154,24 @@ service cloud.firestore {
     }
 
     // ===================================================================
+    // Collection-group read over `members`.
+    //
+    // The workspace picker needs "every workspace I belong to" without first
+    // knowing the workspace IDs, which a path-scoped rule cannot serve: in a
+    // collection-group query the {wid} wildcard is unbound, so isMember(wid)
+    // has nothing to resolve against.
+    //
+    // This rule is safe because Firestore rejects any collection-group query
+    // that could return a document failing it. The client is therefore forced
+    // to filter by uid == its own, and cannot enumerate other people's
+    // memberships even by asking for them.
+    // ===================================================================
+
+    match /{path=**}/members/{memberUid} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ===================================================================
     // users/{uid} — profile only. Roles are never stored here.
     // ===================================================================
 
@@ -193,10 +224,24 @@ service cloud.firestore {
       // No workspace enumeration. The picker reads userWorkspaceIndex.
       allow list: if false;
 
-      // Workspace creation is a Cloud Function: it must seed members,
-      // accounts, categories and settings atomically. A bare client create
-      // would leave a workspace with no Super Admin.
-      allow create: if false;
+      // Workspace creation is a client transaction that must, in the same
+      // commit, create the creator's own member document as an active Super
+      // Admin. getAfter() reads the post-commit state of that member doc, so
+      // a workspace can never exist without exactly one Super Admin, and the
+      // creator cannot make someone else the owner.
+      allow create: if isSignedIn()
+        && incoming().workspaceId == wid
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdBy == request.auth.uid
+        && isBoundedString(incoming().name, 1, 100)
+        && incoming().type in ['personal', 'family', 'business']
+        && incoming().currency == 'INR'
+        && incoming().status == 'active'
+        && incoming().memberCount == 1
+        && hasServerCreatedAt()
+        && getAfter(memberPath(wid)).data.role == 'superAdmin'
+        && getAfter(memberPath(wid)).data.status == 'active'
+        && getAfter(memberPath(wid)).data.uid == request.auth.uid;
 
       allow update: if isSuperAdmin(wid)
         && untouched([
@@ -221,7 +266,62 @@ service cloud.firestore {
       match /members/{memberUid} {
         allow get: if isMember(wid);
         allow list: if isMember(wid);
-        allow create, update, delete: if false;
+
+        // Two — and only two — ways a member document may be created.
+        //
+        // 1. BOOTSTRAP. The workspace does not exist yet, so this write is
+        //    part of the create-workspace transaction above. The only member
+        //    that may be created is the caller, as Super Admin. Because the
+        //    workspace must not already exist, this path cannot be replayed
+        //    later to mint a second Super Admin.
+        //
+        // 2. INVITE. An existing Super Admin invites someone else. The new
+        //    member starts as 'invited', never 'active', and the inviter may
+        //    not create a document for themselves through this path.
+        allow create: if isSignedIn()
+          && incoming().uid == memberUid
+          && incoming().workspaceId == wid
+          && incoming().role in ['superAdmin', 'accountant', 'viewer']
+          && hasServerCreatedAt()
+          && (
+               (
+                 // 1. Bootstrap
+                 memberUid == request.auth.uid
+                 && !exists(/databases/$(database)/documents/workspaces/$(wid))
+                 && incoming().role == 'superAdmin'
+                 && incoming().status == 'active'
+               )
+               || (
+                 // 2. Invite
+                 memberUid != request.auth.uid
+                 && isSuperAdmin(wid)
+                 && incoming().status == 'invited'
+                 && incoming().invitedBy == request.auth.uid
+               )
+             );
+
+        // Role and status changes: Super Admin only, and never on oneself.
+        // Self-exclusion is what prevents a Super Admin being tricked into
+        // demoting the last one, and prevents any self-elevation outright.
+        allow update: if isSuperAdmin(wid)
+          && memberUid != request.auth.uid
+          && untouched(['uid', 'workspaceId', 'createdAt'].toSet())
+          && incoming().role in ['superAdmin', 'accountant', 'viewer']
+          && incoming().status in ['active', 'invited', 'deactivated']
+          // The workspace owner cannot be demoted or deactivated by anyone.
+          && memberUid != get(/databases/$(database)/documents/workspaces/$(wid)).data.ownerUid
+          && hasServerUpdatedAt();
+
+        // A member accepting their own invitation: invited -> active only.
+        allow update: if isSelf(memberUid)
+          && existing().status == 'invited'
+          && incoming().status == 'active'
+          && changedKeys().hasOnly(['status', 'joinedAt', 'updatedAt'])
+          && incoming().joinedAt == request.time
+          && hasServerUpdatedAt();
+
+        // Membership is deactivated, never deleted: audit trails reference it.
+        allow delete: if false;
       }
 
       // -----------------------------------------------------------------
@@ -240,7 +340,7 @@ service cloud.firestore {
           && isLedgerDate(incoming().openingBalanceDate)
           && incoming().currency == 'INR'
           && incoming().isActive is bool
-          && incoming().isSystem == false
+          && incoming().isSystem is bool
           && hasServerCreatedAt();
 
         allow update: if isSuperAdmin(wid)
@@ -272,7 +372,7 @@ service cloud.firestore {
           && isBoundedString(incoming().name, 1, 60)
           && incoming().type in ['income', 'expense']
           && incoming().isActive is bool
-          && incoming().isSystem == false
+          && incoming().isSystem is bool
           && incoming().entryCount == 0
           && hasServerCreatedAt();
 
@@ -494,11 +594,20 @@ service cloud.firestore {
       match /settings/{settingsDoc} {
         allow get, list: if isMember(wid);
 
+        // Seeded during workspace setup, then edited by the Super Admin.
+        // 'accounting' is created with lockDate null and afterwards only a
+        // lock-date transaction may move it, so a closed period cannot be
+        // reopened by a plain settings edit.
+        allow create: if isSuperAdmin(wid)
+          && incoming().workspaceId == wid
+          && (settingsDoc != 'accounting' || incoming().lockDate == null)
+          && hasServerCreatedAt();
+
         allow update: if isSuperAdmin(wid)
           && settingsDoc != 'accounting'
           && hasServerUpdatedAt();
 
-        allow create, delete: if false;
+        allow delete: if false;
       }
 
       // -----------------------------------------------------------------

@@ -1,0 +1,111 @@
+/* ==========================================================================
+   PMExps — Print
+   Governs Ctrl+P output and the A4 ledger report preview. Print is always
+   on white with black text regardless of the active theme: a dark-mode
+   screenshot wastes toner and is unreadable on paper.
+   ========================================================================== */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm 16mm;
+  }
+
+  /* Force the light palette onto the printed page. */
+  :root,
+  [data-theme="dark"],
+  [data-theme="light"] {
+    --bg-page: #fff;
+    --surface-1: #fff;
+    --surface-2: #fff;
+    --surface-3: #fff;
+    --text-primary: #000;
+    --text-secondary: #333;
+    --text-muted: #555;
+    --border-subtle: #ccc;
+    --border-default: #999;
+    --border-strong: #666;
+    --shadow-xs: none;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+
+  /* App chrome never prints. */
+  .app-sidebar,
+  .app-topbar,
+  .app-bottomnav,
+  .app-mobile-header,
+  .no-print,
+  .toast-region,
+  .drawer,
+  .dialog-backdrop {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .app-main {
+    padding: 0;
+  }
+
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+
+  /* Table behaviour is the whole point of the A4 report: headers repeat on
+     every page, and a row is never split across a page break. */
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+  }
+
+  th, td {
+    border: 0.5pt solid #888;
+    padding: 3pt 4pt;
+    vertical-align: top;
+  }
+
+  th {
+    background: #eee !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-weight: 600;
+    text-align: left;
+  }
+
+  td.money, th.money {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* Totals must not be orphaned from the rows they total. */
+  .report-totals,
+  .report-signatures {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .report-signatures {
+    page-break-before: avoid;
+    margin-top: 10mm;
+  }
+
+  .page-break { page-break-before: always; }
+}

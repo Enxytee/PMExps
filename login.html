@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Sign in — PMExps</title>
+    <meta name="description" content="Sign in to PMExps." />
+    <meta name="robots" content="noindex" />
+
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' https://www.gstatic.com;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.firebasestorage.app;
+        font-src 'self';
+        connect-src 'self'
+          https://*.googleapis.com
+          https://*.firebaseio.com
+          https://firestore.googleapis.com
+          https://identitytoolkit.googleapis.com
+          https://securetoken.googleapis.com
+          https://firebasestorage.googleapis.com
+          https://*.firebasestorage.app
+          wss://*.firebaseio.com;
+        frame-src 'self' https://pmexps.firebaseapp.com;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+      "
+    />
+
+    <meta name="theme-color" content="#0c1017" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f6fa" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('pmexps:theme') || 'dark';
+          document.documentElement.setAttribute(
+            'data-theme',
+            stored === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+              : stored
+          );
+          document.documentElement.setAttribute(
+            'lang',
+            localStorage.getItem('pmexps:locale') || 'en'
+          );
+        } catch (e) {}
+      })();
+    </script>
+
+    <link rel="stylesheet" href="./css/tokens.css" />
+    <link rel="stylesheet" href="./css/themes.css" />
+    <link rel="stylesheet" href="./css/base.css" />
+    <link rel="stylesheet" href="./css/components.css" />
+    <link rel="stylesheet" href="./css/utilities.css" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./assets/images/favicon.svg" type="image/svg+xml" />
+  </head>
+
+  <body>
+    <div id="sr-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="sr-alerts" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+    <main class="auth-page">
+      <div id="auth-root" class="auth-card">
+        <p class="u-text-secondary">Loading…</p>
+      </div>
+    </main>
+
+    <noscript>
+      <div style="padding: 2rem; max-width: 40rem; margin: 0 auto">
+        <h1>JavaScript is required</h1>
+        <p>PMExps needs JavaScript to sign you in securely. Enable it, then reload.</p>
+      </div>
+    </noscript>
+
+    <script type="module" src="./js/views/login.js"></script>
+  </body>
+</html>

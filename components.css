@@ -1,0 +1,217 @@
+/* ==========================================================================
+   PMExps — Components
+   Buttons, fields, cards, alerts, badges, loaders. Everything resolves to a
+   token; no literal colour or size appears below.
+   ========================================================================== */
+
+/* -------- Buttons -------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    transform var(--duration-instant) var(--ease-standard);
+}
+
+.btn:hover:not(:disabled) { background: var(--surface-4); border-color: var(--border-strong); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: var(--weight-semibold);
+}
+.btn--primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn--primary:active:not(:disabled) { background: var(--accent-pressed); }
+
+.btn--ghost { background: transparent; border-color: transparent; }
+.btn--ghost:hover:not(:disabled) { background: var(--surface-hover); border-color: transparent; }
+
+.btn--danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+.btn--block { width: 100%; }
+
+/* Busy state: the label stays readable, so a screen reader still announces
+   what the button does while it is working. */
+.btn[aria-busy='true'] { opacity: 0.75; cursor: progress; }
+
+/* -------- Fields --------------------------------------------------------- */
+.field { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.field__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.field__hint { font-size: var(--text-xs); color: var(--text-muted); }
+
+.field__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--danger-text);
+}
+
+/* The bullet is a second, non-colour cue: an error is never signalled by
+   red text alone. */
+.field__error::before { content: '!'; font-weight: var(--weight-bold); }
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-height: var(--touch-target-min);
+  padding: var(--space-3);
+  background: var(--bg-sunken);
+  border: var(--border-width) solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.input::placeholder, .textarea::placeholder { color: var(--text-disabled); }
+.input:hover, .select:hover, .textarea:hover { border-color: var(--border-strong); }
+.input:focus-visible, .select:focus-visible, .textarea:focus-visible { border-color: var(--accent); }
+
+.input[aria-invalid='true'], .select[aria-invalid='true'] { border-color: var(--danger); }
+
+.textarea { min-height: 88px; resize: vertical; }
+
+/* -------- Cards ---------------------------------------------------------- */
+.card {
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-xs);
+}
+
+.card--interactive { cursor: pointer; text-align: left; width: 100%; }
+.card--interactive:hover { border-color: var(--border-strong); background: var(--surface-3); }
+
+.card__title { font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.card__meta { font-size: var(--text-xs); color: var(--text-muted); }
+
+/* -------- Alerts --------------------------------------------------------- */
+.alert {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--border-default);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.alert--danger { background: var(--danger-subtle); border-color: var(--danger-border); color: var(--danger-text); }
+.alert--success { background: var(--success-subtle); border-color: var(--success-border); color: var(--success-text); }
+.alert--warning { background: var(--warning-subtle); border-color: var(--warning-border); color: var(--warning-text); }
+.alert--info { background: var(--info-subtle); border-color: var(--info-border); color: var(--info-text); }
+
+/* -------- Badges --------------------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.badge--draft { background: var(--warning-subtle); border-color: var(--warning-border); color: var(--warning-text); }
+.badge--confirmed { background: var(--success-subtle); border-color: var(--success-border); color: var(--success-text); }
+.badge--locked { background: var(--info-subtle); border-color: var(--info-border); color: var(--info-text); }
+
+/* -------- Auth layout ---------------------------------------------------- */
+.auth-page {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--space-5);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: var(--space-7);
+  box-shadow: var(--shadow-lg);
+}
+
+.auth-card__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.auth-card__brand img { width: 40px; height: 40px; border-radius: var(--radius-md); }
+
+/* -------- Loaders -------------------------------------------------------- */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base) 25%,
+    var(--skeleton-shine) 50%,
+    var(--skeleton-base) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* -------- Empty state ---------------------------------------------------- */
+.empty-state {
+  display: grid;
+  place-items: center;
+  gap: var(--space-3);
+  padding: var(--space-9) var(--space-5);
+  text-align: center;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+}

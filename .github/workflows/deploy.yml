@@ -1,7 +1,7 @@
 # PMExps — test and deploy to GitHub Pages
 #
-# Runs on every push to main. Tests first; a failure stops the deployment,
-# so a broken build never reaches the live site.
+# Runs on every push to main. Tests run first; a failure stops the
+# deployment, so a broken build never reaches the live site.
 
 name: Deploy to GitHub Pages
 
@@ -57,3 +57,75 @@ jobs:
             exit 1
           fi
           echo "No service-account credentials found."
+
+  build:
+    name: Build site
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble publishable site
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'functions' \
+            --exclude 'tests' \
+            --exclude 'scripts' \
+            --exclude 'package.json' \
+            --exclude 'package-lock.json' \
+            --exclude 'firebase.json' \
+            --exclude '.firebaserc*' \
+            --exclude 'firestore.rules' \
+            --exclude 'firestore.indexes.json' \
+            --exclude 'storage.rules' \
+            --exclude '.env*' \
+            --exclude '_site' \
+            ./ _site/
+          touch _site/.nojekyll
+
+      - name: Stamp build version
+        run: |
+          SHA_SHORT="${GITHUB_SHA::7}"
+          sed -i "s/version: '0\.1\.0'/version: '0.1.0+${SHA_SHORT}'/" \
+            _site/js/config/constants.js
+          echo "Stamped build ${SHA_SHORT}"
+
+      - name: Verify entry points exist
+        run: |
+          for f in index.html 404.html manifest.webmanifest \
+                   css/tokens.css js/app.js assets/images/icon-512.png; do
+            test -f "_site/$f" || { echo "::error::Missing $f"; exit 1; }
+          done
+          echo "All entry points present."
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Smoke test the live site
+        run: |
+          URL="${{ steps.deployment.outputs.page_url }}"
+          echo "Deployed to $URL"
+          sleep 10
+          for path in "" "manifest.webmanifest" "css/tokens.css" "js/app.js"; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${URL}${path}")
+            echo "  ${CODE}  ${URL}${path}"
+            [ "$CODE" = "200" ] || { echo "::error::${path} returned ${CODE}"; exit 1; }
+          done
+          echo "Smoke test passed."

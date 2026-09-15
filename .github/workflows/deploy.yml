@@ -1,8 +1,8 @@
-# Deploys the static frontend to GitHub Pages from main.
+# PMExps — test and deploy to GitHub Pages
 #
-# Only the files the browser needs are published. functions/, tests/, scripts/
-# and node_modules/ are excluded — not because they are secret, but because
-# publishing them enlarges the site and invites confusion about what is live.
+# Runs on every push to main. Tests first; a failure stops the deployment,
+# so a broken build never reaches the live site.
+
 name: Deploy to GitHub Pages
 
 on:
@@ -10,22 +10,49 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Pages deployment needs these; nothing else in the repo does.
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# One deployment at a time. A queued run is not cancelled, so a merge train
-# still publishes the final state rather than an intermediate one.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  # Tests gate the deployment. This reuses test.yml rather than duplicating it.
   test:
-    uses: ./.github/workflows/test.yml
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Check role names match between rules and client
+        run: |
+          for role in superAdmin accountant viewer; do
+            grep -q "$role" firestore.rules \
+              || { echo "::error::Role '$role' missing from firestore.rules"; exit 1; }
+            grep -q "$role" js/config/constants.js \
+              || { echo "::error::Role '$role' missing from constants.js"; exit 1; }
+          done
+          echo "Role names are consistent."
+
+      - name: Assert no service-account credentials are committed
+        run: |
+          if git grep -nIE '"type"[[:space:]]*:[[:space:]]*"service_account"|BEGIN PRIVATE KEY' -- . ; then
+            echo "::error::A service-account credential appears to be committed."
+            exit 1
+          fi
+          echo "No service-account credentials found."
 
   build:
     name: Build site
@@ -54,13 +81,8 @@ jobs:
             --exclude '.env*' \
             --exclude '_site' \
             ./ _site/
-
-          # Jekyll would otherwise ignore any file or directory beginning with
-          # an underscore. This is the standard GitHub Pages foot-gun.
           touch _site/.nojekyll
 
-      # Stamps the commit SHA so the running app can report exactly what is
-      # deployed — essential when debugging a cached service worker later.
       - name: Stamp build version
         run: |
           SHA_SHORT="${GITHUB_SHA::7}"
@@ -68,11 +90,11 @@ jobs:
             _site/js/config/constants.js
           echo "Stamped build ${SHA_SHORT}"
 
-      - name: Verify the entry points exist
+      - name: Verify entry points exist
         run: |
           for f in index.html 404.html manifest.webmanifest \
                    css/tokens.css js/app.js assets/images/icon-512.png; do
-            test -f "_site/$f" || { echo "::error::Missing $f in build output"; exit 1; }
+            test -f "_site/$f" || { echo "::error::Missing $f"; exit 1; }
           done
           echo "All entry points present."
 

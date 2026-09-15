@@ -1,0 +1,42 @@
+{
+  "name": "PMExps — Daily Ledger",
+  "short_name": "PMExps",
+  "description": "Daily income, expense and transfer ledger for personal, family and small-business accounts.",
+  "id": "/PMExps/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
+  "background_color": "#0c1017",
+  "theme_color": "#0c1017",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "categories": ["finance", "business", "productivity"],
+  "icons": [
+    { "src": "./assets/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/images/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./assets/images/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add income",
+      "short_name": "Income",
+      "url": "./index.html#/entry/new?type=income",
+      "icons": [{ "src": "./assets/images/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Add expense",
+      "short_name": "Expense",
+      "url": "./index.html#/entry/new?type=expense",
+      "icons": [{ "src": "./assets/images/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Today's ledger",
+      "short_name": "Ledger",
+      "url": "./index.html#/ledger",
+      "icons": [{ "src": "./assets/images/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

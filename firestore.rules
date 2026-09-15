@@ -1,0 +1,530 @@
+rules_version = '2';
+
+// ===========================================================================
+// PMExps — Firestore Security Rules
+//
+// Posture: deny by default. Nothing is readable or writable unless a rule
+// below explicitly allows it.
+//
+// Three things are true of every financial write path here:
+//   1. Authentication alone grants nothing. Access requires an ACTIVE member
+//      document at workspaces/{wid}/members/{uid}.
+//   2. Clients may only ever write documents in 'draft' status. Confirmation,
+//      locking, transfers, corrections and voucher allocation have NO client
+//      write path at all — they are callable Cloud Functions using the Admin
+//      SDK, which bypasses these rules by design.
+//   3. Role fields, counters, summaries and audit logs are unwritable by
+//      clients under every circumstance, so privilege escalation and history
+//      rewriting are structurally impossible rather than merely disallowed.
+//
+// Tests proving cross-workspace access is rejected: tests/rules/
+// ===========================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------
+    // Identity and membership helpers
+    // ---------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function memberPath(wid) {
+      return /databases/$(database)/documents/workspaces/$(wid)/members/$(request.auth.uid);
+    }
+
+    function memberDoc(wid) {
+      return get(memberPath(wid)).data;
+    }
+
+    // An ACTIVE member. 'invited' and 'deactivated' grant nothing.
+    function isMember(wid) {
+      return isSignedIn()
+        && exists(memberPath(wid))
+        && memberDoc(wid).status == 'active';
+    }
+
+    function memberRole(wid) {
+      return memberDoc(wid).role;
+    }
+
+    function isSuperAdmin(wid) {
+      return isMember(wid) && memberRole(wid) == 'superAdmin';
+    }
+
+    function isAccountant(wid) {
+      return isMember(wid) && memberRole(wid) == 'accountant';
+    }
+
+    function isViewer(wid) {
+      return isMember(wid) && memberRole(wid) == 'viewer';
+    }
+
+    // Anyone who may originate a financial draft.
+    function canWriteEntries(wid) {
+      return isSuperAdmin(wid) || isAccountant(wid);
+    }
+
+    // ---------------------------------------------------------------------
+    // Workspace settings helpers
+    // ---------------------------------------------------------------------
+
+    function accountingSettings(wid) {
+      return get(/databases/$(database)/documents/workspaces/$(wid)/settings/accounting).data;
+    }
+
+    // A ledger date is locked when it is on or before the workspace lock date.
+    // ISO YYYY-MM-DD compares correctly as a string.
+    function isDateLocked(wid, ledgerDate) {
+      let settings = accountingSettings(wid);
+      return settings.lockDate != null && ledgerDate <= settings.lockDate;
+    }
+
+    // ---------------------------------------------------------------------
+    // Field and value validators
+    // ---------------------------------------------------------------------
+
+    function isLedgerDate(value) {
+      return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // Money is an integer number of paise, strictly positive, under ~₹100 cr.
+    function isPositivePaise(value) {
+      return value is int && value > 0 && value <= 99999999999;
+    }
+
+    function isPaise(value) {
+      return value is int && value >= -99999999999 && value <= 99999999999;
+    }
+
+    function isBoundedString(value, minLen, maxLen) {
+      return value is string && value.size() >= minLen && value.size() <= maxLen;
+    }
+
+    function isOptionalString(value, maxLen) {
+      return value == null || (value is string && value.size() <= maxLen);
+    }
+
+    // The set of fields this write is attempting to change.
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // True when the write touches none of the named fields.
+    function untouched(fields) {
+      return !changedKeys().hasAny(fields);
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // A document's workspaceId must agree with the path it is stored at.
+    // Belt and braces: the path already isolates tenants, but collection-group
+    // queries and rebuild scripts read the field, so the two must never drift.
+    function workspaceIdMatches(wid) {
+      return incoming().workspaceId == wid;
+    }
+
+    // Server timestamps only. A client clock is never trusted for audit order.
+    function hasServerCreatedAt() {
+      return incoming().createdAt == request.time;
+    }
+
+    function hasServerUpdatedAt() {
+      return incoming().updatedAt == request.time;
+    }
+
+    // ===================================================================
+    // users/{uid} — profile only. Roles are never stored here.
+    // ===================================================================
+
+    match /users/{uid} {
+      allow get: if isSelf(uid);
+      allow list: if false;
+
+      // A user may create their own profile on first sign-in, but cannot
+      // create it pre-disabled or with fields they do not own.
+      allow create: if isSelf(uid)
+        && incoming().uid == uid
+        && incoming().email == request.auth.token.email
+        && isBoundedString(incoming().displayName, 1, 80)
+        && incoming().disabled == false
+        && incoming().locale in ['en', 'gu']
+        && incoming().theme in ['dark', 'light', 'system']
+        && hasServerCreatedAt();
+
+      // Only self-service preference fields are updatable from the client.
+      allow update: if isSelf(uid)
+        && untouched([
+             'uid', 'email', 'disabled', 'createdAt'
+           ].toSet())
+        && isBoundedString(incoming().displayName, 1, 80)
+        && incoming().locale in ['en', 'gu']
+        && incoming().theme in ['dark', 'light', 'system']
+        && hasServerUpdatedAt();
+
+      allow delete: if false;
+    }
+
+    // ===================================================================
+    // userWorkspaceIndex/{uid} — read-only cache maintained by a trigger.
+    // Rules NEVER consult this for authorisation; members/ is authoritative.
+    // ===================================================================
+
+    match /userWorkspaceIndex/{uid} {
+      allow get: if isSelf(uid);
+      allow list, write: if false;
+    }
+
+    // ===================================================================
+    // workspaces/{workspaceId}
+    // ===================================================================
+
+    match /workspaces/{wid} {
+
+      allow get: if isMember(wid);
+
+      // No workspace enumeration. The picker reads userWorkspaceIndex.
+      allow list: if false;
+
+      // Workspace creation is a Cloud Function: it must seed members,
+      // accounts, categories and settings atomically. A bare client create
+      // would leave a workspace with no Super Admin.
+      allow create: if false;
+
+      allow update: if isSuperAdmin(wid)
+        && untouched([
+             'workspaceId', 'ownerUid', 'memberCount', 'status',
+             'currency', 'createdAt', 'createdBy'
+           ].toSet())
+        && isBoundedString(incoming().name, 1, 100)
+        && isOptionalString(incoming().businessName, 120)
+        && isOptionalString(incoming().address, 300)
+        && hasServerUpdatedAt();
+
+      allow delete: if false;
+
+      // -----------------------------------------------------------------
+      // members — the permission record. Zero client write paths.
+      //
+      // This is the single most important block in the file. Because no
+      // client can write a role field anywhere, a user cannot elevate
+      // themselves even if every UI control were bypassed.
+      // -----------------------------------------------------------------
+
+      match /members/{memberUid} {
+        allow get: if isMember(wid);
+        allow list: if isMember(wid);
+        allow create, update, delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // accounts — Super Admin manages; everyone reads. Never deleted.
+      // -----------------------------------------------------------------
+
+      match /accounts/{accountId} {
+        allow get, list: if isMember(wid);
+
+        allow create: if isSuperAdmin(wid)
+          && workspaceIdMatches(wid)
+          && incoming().accountId == accountId
+          && isBoundedString(incoming().name, 1, 60)
+          && incoming().type in ['cash', 'bank', 'upiCard', 'party']
+          && isPaise(incoming().openingBalancePaise)
+          && isLedgerDate(incoming().openingBalanceDate)
+          && incoming().currency == 'INR'
+          && incoming().isActive is bool
+          && incoming().isSystem == false
+          && hasServerCreatedAt();
+
+        allow update: if isSuperAdmin(wid)
+          && untouched([
+               'accountId', 'workspaceId', 'isSystem', 'currency', 'createdAt', 'createdBy'
+             ].toSet())
+          && isBoundedString(incoming().name, 1, 60)
+          && incoming().type in ['cash', 'bank', 'upiCard', 'party']
+          && isPaise(incoming().openingBalancePaise)
+          && isLedgerDate(incoming().openingBalanceDate)
+          && incoming().isActive is bool
+          && hasServerUpdatedAt();
+
+        // Deactivate instead. Historical entries must keep resolving.
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // categories — as accounts. `type` immutability once used is enforced
+      // in the Cloud Function, which can read entryCount reliably.
+      // -----------------------------------------------------------------
+
+      match /categories/{categoryId} {
+        allow get, list: if isMember(wid);
+
+        allow create: if isSuperAdmin(wid)
+          && workspaceIdMatches(wid)
+          && incoming().categoryId == categoryId
+          && isBoundedString(incoming().name, 1, 60)
+          && incoming().type in ['income', 'expense']
+          && incoming().isActive is bool
+          && incoming().isSystem == false
+          && incoming().entryCount == 0
+          && hasServerCreatedAt();
+
+        allow update: if isSuperAdmin(wid)
+          && untouched([
+               'categoryId', 'workspaceId', 'isSystem', 'entryCount',
+               'createdAt', 'createdBy'
+             ].toSet())
+          && isBoundedString(incoming().name, 1, 60)
+          && incoming().type in ['income', 'expense']
+          // Changing type is only safe while unused; the function re-checks.
+          && (incoming().type == existing().type || existing().entryCount == 0)
+          && incoming().isActive is bool
+          && hasServerUpdatedAt();
+
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // ledgerEntries — drafts only from the client.
+      //
+      // Confirmation is a Cloud Function. There is no rule below that
+      // permits a client to set status to 'confirmed', allocate a voucher
+      // number, or modify a document that is already confirmed or locked.
+      // -----------------------------------------------------------------
+
+      match /ledgerEntries/{entryId} {
+
+        // Fields a client may never write, in any operation.
+        function serverOnlyEntryFields() {
+          return [
+            'voucherNumber', 'confirmedBy', 'confirmedByName', 'confirmedAt',
+            'lockedBy', 'lockedAt', 'correctedBy', 'correctionOf',
+            'reversalOf', 'correctionRequestId', 'transferId', 'transferLeg',
+            'financialYear'
+          ].toSet();
+        }
+
+        function validDraftShape() {
+          return workspaceIdMatches(wid)
+            && incoming().entryId == entryId
+            && incoming().status == 'draft'
+            && incoming().type in ['income', 'expense']
+            && isPositivePaise(incoming().amountPaise)
+            && isLedgerDate(incoming().ledgerDate)
+            && isBoundedString(incoming().description, 1, 200)
+            && isBoundedString(incoming().categoryId, 1, 64)
+            && isBoundedString(incoming().accountId, 1, 64)
+            && incoming().paymentMode in [
+                 'cash', 'bankTransfer', 'upi', 'debitCard',
+                 'creditCard', 'cheque', 'other'
+               ]
+            && isOptionalString(incoming().partyName, 100)
+            && isOptionalString(incoming().referenceNumber, 50)
+            && isOptionalString(incoming().remarks, 500)
+            && incoming().attachments is list
+            && incoming().attachments.size() <= 5
+            && isBoundedString(incoming().clientRequestId, 8, 64)
+            // A draft carries no voucher number and no confirmation trace.
+            && incoming().voucherNumber == null
+            && incoming().confirmedAt == null
+            && incoming().lockedAt == null
+            && incoming().transferId == null;
+        }
+
+        allow get, list: if isMember(wid);
+
+        allow create: if canWriteEntries(wid)
+          && validDraftShape()
+          && incoming().enteredBy == request.auth.uid
+          && !isDateLocked(wid, incoming().ledgerDate)
+          && hasServerCreatedAt();
+
+        // Editing a draft. Both the before and after state must be a draft,
+        // so this can never be used to confirm or to alter confirmed history.
+        allow update: if canWriteEntries(wid)
+          && existing().status == 'draft'
+          && validDraftShape()
+          && untouched(serverOnlyEntryFields())
+          && untouched(['entryId', 'workspaceId', 'enteredBy', 'createdAt'].toSet())
+          && !isDateLocked(wid, incoming().ledgerDate)
+          && !isDateLocked(wid, existing().ledgerDate)
+          // Accountants edit their own drafts; Super Admin may edit any.
+          && (isSuperAdmin(wid) || existing().enteredBy == request.auth.uid)
+          && hasServerUpdatedAt();
+
+        // Nothing financial is ever deleted. Drafts are retired to
+        // 'voidDraft' through the update path above being replaced by the
+        // voidDraft function, keeping a recoverable record.
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // transfers — draft creation only. Confirmation writes two balanced
+      // ledger legs and must be atomic, so it is function-only.
+      // -----------------------------------------------------------------
+
+      match /transfers/{transferId} {
+        allow get, list: if isMember(wid);
+
+        allow create: if canWriteEntries(wid)
+          && workspaceIdMatches(wid)
+          && incoming().transferId == transferId
+          && incoming().status == 'draft'
+          && isPositivePaise(incoming().amountPaise)
+          && isLedgerDate(incoming().ledgerDate)
+          && isBoundedString(incoming().fromAccountId, 1, 64)
+          && isBoundedString(incoming().toAccountId, 1, 64)
+          // The one invariant that must hold even on a draft.
+          && incoming().fromAccountId != incoming().toAccountId
+          && isOptionalString(incoming().description, 200)
+          && isOptionalString(incoming().remarks, 500)
+          && isBoundedString(incoming().clientRequestId, 8, 64)
+          && incoming().voucherNumber == null
+          && incoming().outEntryId == null
+          && incoming().inEntryId == null
+          && incoming().createdBy == request.auth.uid
+          && !isDateLocked(wid, incoming().ledgerDate)
+          && hasServerCreatedAt();
+
+        allow update: if canWriteEntries(wid)
+          && existing().status == 'draft'
+          && incoming().status == 'draft'
+          && incoming().fromAccountId != incoming().toAccountId
+          && isPositivePaise(incoming().amountPaise)
+          && untouched([
+               'transferId', 'workspaceId', 'voucherNumber', 'outEntryId',
+               'inEntryId', 'confirmedBy', 'confirmedAt', 'createdBy',
+               'createdAt', 'reversalOfTransferId', 'reversedByTransferId'
+             ].toSet())
+          && (isSuperAdmin(wid) || existing().createdBy == request.auth.uid)
+          && !isDateLocked(wid, incoming().ledgerDate)
+          && hasServerUpdatedAt();
+
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // correctionRequests — request from the client, approve from a
+      // function. A requester may cancel their own pending request.
+      // -----------------------------------------------------------------
+
+      match /correctionRequests/{requestId} {
+        allow get, list: if isMember(wid);
+
+        allow create: if canWriteEntries(wid)
+          && workspaceIdMatches(wid)
+          && incoming().requestId == requestId
+          && incoming().status == 'pending'
+          && incoming().targetType in ['ledgerEntry', 'transfer']
+          && isBoundedString(incoming().targetId, 1, 64)
+          // A reason is mandatory and must be substantive.
+          && isBoundedString(incoming().reason, 10, 500)
+          && incoming().requestedBy == request.auth.uid
+          && incoming().reviewedBy == null
+          && incoming().reversalEntryId == null
+          && incoming().replacementEntryId == null
+          && isBoundedString(incoming().clientRequestId, 8, 64)
+          && hasServerCreatedAt();
+
+        // The only client update is the requester withdrawing it.
+        allow update: if isMember(wid)
+          && existing().status == 'pending'
+          && existing().requestedBy == request.auth.uid
+          && incoming().status == 'cancelled'
+          && changedKeys().hasOnly(['status', 'updatedAt'])
+          && hasServerUpdatedAt();
+
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // auditLogs — append-only, and not even append from a client.
+      // -----------------------------------------------------------------
+
+      match /auditLogs/{auditId} {
+        // Super Admin sees everything; an Accountant sees only their own
+        // actions ("Limited" in the capability matrix); Viewer sees none.
+        allow get, list: if isSuperAdmin(wid)
+          || (isAccountant(wid) && resource.data.actorUid == request.auth.uid);
+
+        allow create, update, delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // Derived and protected collections — readable, never client-written.
+      // -----------------------------------------------------------------
+
+      match /dailySummaries/{summaryId} {
+        allow get, list: if isMember(wid);
+        allow write: if false;
+      }
+
+      match /accountBalances/{accountId} {
+        allow get, list: if isMember(wid);
+        allow write: if false;
+      }
+
+      match /voucherCounters/{counterId} {
+        // Not even readable: the next voucher number is not the client's
+        // business, and exposing it invites client-side number generation.
+        allow read, write: if false;
+      }
+
+      match /idempotency/{requestId} {
+        allow read, write: if false;
+      }
+
+      match /lockDates/{lockId} {
+        allow get, list: if isMember(wid);
+        allow write: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // settings — readable by members, writable by Super Admin except for
+      // the accounting lock date, which only a function may move.
+      // -----------------------------------------------------------------
+
+      match /settings/{settingsDoc} {
+        allow get, list: if isMember(wid);
+
+        allow update: if isSuperAdmin(wid)
+          && settingsDoc != 'accounting'
+          && hasServerUpdatedAt();
+
+        allow create, delete: if false;
+      }
+
+      // -----------------------------------------------------------------
+      // notifications — a user reads their own and may mark them read.
+      // -----------------------------------------------------------------
+
+      match /notifications/{notificationId} {
+        allow get, list: if isMember(wid)
+          && (resource.data.recipientUid == request.auth.uid
+              || resource.data.recipientUid == null);
+
+        allow update: if isMember(wid)
+          && resource.data.recipientUid == request.auth.uid
+          && changedKeys().hasOnly(['readAt'])
+          && incoming().readAt == request.time;
+
+        allow create, delete: if false;
+      }
+    }
+
+    // ===================================================================
+    // Anything not matched above is denied.
+    // ===================================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,165 @@
+/* ==========================================================================
+   PMExps — Design tokens
+   Every colour, size, radius and timing in the app resolves to a value here.
+   Never hard-code a hex value, px radius or ms duration in another stylesheet.
+   Theme-dependent values live in themes.css and override the :root defaults.
+   ========================================================================== */
+
+:root {
+  /* ---- Accent ------------------------------------------------------------
+     One configurable accent. Workspace settings may override --accent at
+     runtime by setting it on :root; every derived shade recomputes from it
+     only where a colour-mix is used, so keep the manual shades in sync. */
+  --accent: #5b8cff;
+  --accent-hover: #7099ff;
+  --accent-pressed: #4478ea;
+  --accent-subtle: rgba(91, 140, 255, 0.14);
+  --accent-border: rgba(91, 140, 255, 0.38);
+  --accent-contrast: #08101f;
+
+  /* ---- Semantic state colours -------------------------------------------
+     Income/credit reads as success, expense/debit as danger, but colour is
+     never the only carrier of meaning — always pair with a label or sign. */
+  --success: #3bc98a;
+  --success-text: #6fe0ae;
+  --success-subtle: rgba(59, 201, 138, 0.14);
+  --success-border: rgba(59, 201, 138, 0.34);
+
+  --warning: #e8a33d;
+  --warning-text: #f3c072;
+  --warning-subtle: rgba(232, 163, 61, 0.14);
+  --warning-border: rgba(232, 163, 61, 0.34);
+
+  --danger: #f2555a;
+  --danger-text: #ff8b8f;
+  --danger-subtle: rgba(242, 85, 90, 0.14);
+  --danger-border: rgba(242, 85, 90, 0.34);
+
+  --info: #4bb3d8;
+  --info-text: #82cfeb;
+  --info-subtle: rgba(75, 179, 216, 0.14);
+  --info-border: rgba(75, 179, 216, 0.34);
+
+  /* ---- Financial direction ----------------------------------------------
+     Aliases so ledger code reads by meaning, not by state colour. */
+  --money-in: var(--success-text);
+  --money-out: var(--danger-text);
+  --money-neutral: var(--text-primary);
+
+  /* ---- Radii -------------------------------------------------------------
+     Moderate and hierarchical: controls tighter than cards, cards tighter
+     than sheets. Not one radius on everything. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* ---- Spacing scale (4px base) ----------------------------------------- */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+  --space-11: 80px;
+
+  /* ---- Typography --------------------------------------------------------
+     System-first stack with an explicit Gujarati fallback so gu-IN text
+     renders with correct conjuncts even before webfonts load. */
+  --font-sans:
+    "Inter var", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Gujarati", "Shruti",
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-gujarati:
+    "Noto Sans Gujarati", "Shruti", "Nirmala UI", var(--font-sans);
+  /* Tabular figures for every monetary column. Applied via .tnum / .money. */
+  --font-numeric: var(--font-sans);
+
+  --text-2xs: 0.6875rem; /* 11px — dense table meta only */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px — table body */
+  --text-base: 0.875rem; /* 14px — app default, not 16px; this is a dense tool */
+  --text-md: 1rem;       /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.375rem;   /* 22px */
+  --text-2xl: 1.75rem;   /* 28px */
+  --text-3xl: 2.25rem;   /* 36px — headline balance figures */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.55;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight: -0.015em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+
+  /* ---- Borders ----------------------------------------------------------- */
+  --border-width: 1px;
+  --border-width-strong: 2px;
+
+  /* ---- Focus ------------------------------------------------------------- */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color: var(--accent);
+
+  /* ---- Layout dimensions ------------------------------------------------- */
+  --sidebar-width: 248px;
+  --sidebar-width-collapsed: 68px;
+  --topbar-height: 56px;
+  --bottomnav-height: 60px;
+  --content-max-width: 1440px;
+  --form-max-width: 640px;
+  --touch-target-min: 44px;
+
+  /* Safe areas for notched devices; fall back to 0 on desktop. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* ---- Motion ------------------------------------------------------------ */
+  --duration-instant: 90ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 250ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+
+  /* ---- Z-index scale ----------------------------------------------------- */
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-sidebar: 200;
+  --z-bottomnav: 250;
+  --z-drawer: 300;
+  --z-dialog: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* ---- Charts -----------------------------------------------------------
+     Ordered for colourblind separability (blue → amber → teal → magenta …).
+     Series must also differ by pattern or direct label, never colour alone. */
+  --chart-1: #5b8cff;
+  --chart-2: #e8a33d;
+  --chart-3: #3bc98a;
+  --chart-4: #c77dff;
+  --chart-5: #4bb3d8;
+  --chart-6: #f2555a;
+  --chart-7: #9aa7bd;
+  --chart-8: #7ad1b0;
+  --chart-grid: var(--border-subtle);
+  --chart-axis-text: var(--text-muted);
+}

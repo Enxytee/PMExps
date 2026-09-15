@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Redirecting — PMExps</title>
+    <meta name="robots" content="noindex" />
+
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('pmexps:theme') || 'dark';
+          document.documentElement.setAttribute(
+            'data-theme',
+            stored === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+              : stored
+          );
+        } catch (e) {}
+      })();
+    </script>
+
+    <!--
+      GitHub Pages serves this file for any path it cannot find.
+
+      PMExps uses hash routing (#/ledger, #/reports), so a correctly-formed
+      link never reaches here — the server only ever sees the base path and
+      everything after '#' stays in the browser. This file therefore handles
+      two real cases:
+
+        1. Someone opens a deep path directly, e.g. /PMExps/reports. We rewrite
+           it to /PMExps/#/reports and send them on, preserving their
+           destination instead of dumping them at the dashboard.
+        2. A genuinely wrong URL. After the rewrite attempt the app's own
+           not-found screen takes over, which can at least offer navigation.
+
+      The base path is derived from this page's own location rather than
+      hard-coded, so renaming the repository does not break it.
+    -->
+    <script>
+      (function () {
+        var path = window.location.pathname;
+        var search = window.location.search;
+        var hash = window.location.hash;
+
+        // On a project site the first path segment is the repository name.
+        // On a custom domain at the root there is no such segment.
+        var segments = path.split('/').filter(Boolean);
+        var isProjectSite = window.location.hostname.endsWith('.github.io');
+        var base = isProjectSite && segments.length > 0 ? '/' + segments[0] + '/' : '/';
+
+        var remainder = path.slice(base.length).replace(/^\/+/, '');
+        var route = hash ? hash.replace(/^#\/?/, '') : remainder;
+
+        var target = base + (route ? '#/' + route : '') + search;
+
+        // replace() rather than assign(), so the broken URL does not sit in
+        // history and trap the user in a back-button loop.
+        window.location.replace(target);
+      })();
+    </script>
+
+    <link rel="stylesheet" href="./css/tokens.css" />
+    <link rel="stylesheet" href="./css/themes.css" />
+    <link rel="stylesheet" href="./css/base.css" />
+  </head>
+  <body>
+    <main style="max-width: 32rem; margin: 15vh auto; padding: 0 1.5rem">
+      <h1>Taking you back to PMExps</h1>
+      <p class="u-text-secondary" style="color: var(--text-secondary)">
+        That address does not exist. If this page stays on screen, JavaScript is
+        blocked — open the app directly instead.
+      </p>
+      <p style="margin-top: 1.5rem">
+        <a href="./">Open PMExps</a>
+      </p>
+    </main>
+  </body>
+</html>

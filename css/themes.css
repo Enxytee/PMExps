@@ -1,0 +1,141 @@
+/* ==========================================================================
+   PMExps — Themes
+   Dark is the default. `data-theme` on <html> is set by the inline bootstrap
+   in each HTML file before first paint, so there is no flash of wrong theme.
+   Values: "dark" | "light". "system" is resolved to one of those in JS.
+   ========================================================================== */
+
+/* -------- Dark (default) --------------------------------------------------
+   Ink-navy base rather than pure black: deep enough for long sessions,
+   tinted enough that stacked surfaces read as layers instead of grey noise. */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-page: #0c1017;
+  --bg-sunken: #080b11;       /* wells, table striping, code */
+  --surface-1: #131926;       /* sidebar, topbar */
+  --surface-2: #171f2f;       /* cards */
+  --surface-3: #1d2739;       /* raised: dropdowns, popovers */
+  --surface-4: #232e44;       /* dialogs, drawers */
+  --surface-hover: rgba(255, 255, 255, 0.045);
+  --surface-active: rgba(255, 255, 255, 0.075);
+  --surface-selected: var(--accent-subtle);
+
+  --border-subtle: #1f2838;
+  --border-default: #2a3549;
+  --border-strong: #3a4761;
+  --border-input: #303c53;
+
+  --text-primary: #e7ebf3;
+  --text-secondary: #a7b2c7;
+  --text-muted: #7b879e;      /* passes 4.5:1 on --bg-page */
+  --text-disabled: #5a6479;
+  --text-inverse: #0c1017;
+  --text-on-accent: var(--accent-contrast);
+
+  --overlay: rgba(6, 9, 14, 0.66);
+  --scrim: rgba(6, 9, 14, 0.4);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.36);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.52);
+  --shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
+  --skeleton-base: #1a2232;
+  --skeleton-shine: #232e42;
+}
+
+/* -------- Light -----------------------------------------------------------
+   Cool paper, not warm cream. Reads as the same product in daylight rather
+   than a separate theme. */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-page: #f4f6fa;
+  --bg-sunken: #eaeef5;
+  --surface-1: #ffffff;
+  --surface-2: #ffffff;
+  --surface-3: #ffffff;
+  --surface-4: #ffffff;
+  --surface-hover: rgba(15, 25, 45, 0.04);
+  --surface-active: rgba(15, 25, 45, 0.07);
+  --surface-selected: var(--accent-subtle);
+
+  --border-subtle: #e4e9f1;
+  --border-default: #d4dbe7;
+  --border-strong: #b9c3d3;
+  --border-input: #c8d1e0;
+
+  --text-primary: #131a26;
+  --text-secondary: #46536a;
+  --text-muted: #626f86;
+  --text-disabled: #97a1b3;
+  --text-inverse: #ffffff;
+
+  --accent: #3568e0;
+  --accent-hover: #2b5bcc;
+  --accent-pressed: #2450b8;
+  --accent-subtle: rgba(53, 104, 224, 0.1);
+  --accent-border: rgba(53, 104, 224, 0.35);
+  --accent-contrast: #ffffff;
+
+  --success: #1a9f68;
+  --success-text: #10794d;
+  --success-subtle: rgba(26, 159, 104, 0.12);
+  --success-border: rgba(26, 159, 104, 0.34);
+
+  --warning: #b87514;
+  --warning-text: #8c5806;
+  --warning-subtle: rgba(184, 117, 20, 0.13);
+  --warning-border: rgba(184, 117, 20, 0.34);
+
+  --danger: #d32f36;
+  --danger-text: #ad1f26;
+  --danger-subtle: rgba(211, 47, 54, 0.11);
+  --danger-border: rgba(211, 47, 54, 0.32);
+
+  --info: #1c7fa6;
+  --info-text: #14627f;
+  --info-subtle: rgba(28, 127, 166, 0.11);
+  --info-border: rgba(28, 127, 166, 0.32);
+
+  --overlay: rgba(19, 26, 38, 0.42);
+  --scrim: rgba(19, 26, 38, 0.18);
+
+  --shadow-xs: 0 1px 2px rgba(19, 26, 38, 0.06);
+  --shadow-sm: 0 2px 6px rgba(19, 26, 38, 0.08);
+  --shadow-md: 0 6px 18px rgba(19, 26, 38, 0.1);
+  --shadow-lg: 0 18px 44px rgba(19, 26, 38, 0.14);
+  --shadow-inset-top: none;
+
+  --skeleton-base: #e4e9f1;
+  --skeleton-shine: #f0f3f8;
+
+  --chart-1: #3568e0;
+  --chart-2: #b87514;
+  --chart-3: #1a9f68;
+  --chart-4: #8d47c9;
+  --chart-5: #1c7fa6;
+  --chart-6: #d32f36;
+  --chart-7: #5d6b82;
+  --chart-8: #2f9d85;
+}
+
+/* Theme transition is opt-in and brief, applied by JS only on manual toggle,
+   so navigation and first paint never animate. */
+.theme-transition,
+.theme-transition * {
+  transition:
+    background-color var(--duration-normal) var(--ease-standard),
+    border-color var(--duration-normal) var(--ease-standard),
+    color var(--duration-normal) var(--ease-standard) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-transition,
+  .theme-transition * {
+    transition: none !important;
+  }
+}

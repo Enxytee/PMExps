@@ -1,0 +1,121 @@
+/* ==========================================================================
+   PMExps — Responsive
+   Breakpoints, named for what changes rather than for device marketing:
+     < 768px   mobile  — bottom nav, cards instead of a wide table
+     ≥ 768px   tablet  — two-column grids, table returns
+     ≥ 1024px  desktop — sidebar appears
+     ≥ 1440px  wide    — content max-width takes effect
+   ========================================================================== */
+
+/* -------- Below 1024px: no sidebar, mobile chrome takes over -------------- */
+@media (max-width: 1023px) {
+  .app-shell,
+  .app-shell[data-sidebar="collapsed"] {
+    grid-template-areas:
+      "topbar"
+      "main";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .app-sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: min(84vw, 300px);
+    z-index: var(--z-drawer);
+    transform: translateX(-100%);
+    transition: transform var(--duration-slow) var(--ease-standard);
+    box-shadow: var(--shadow-lg);
+    padding-top: calc(var(--space-4) + var(--safe-top));
+  }
+
+  .app-shell[data-drawer="open"] .app-sidebar {
+    transform: translateX(0);
+  }
+
+  .app-topbar {
+    display: none;
+  }
+
+  .app-mobile-header {
+    grid-area: topbar;
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: calc(var(--topbar-height) + var(--safe-top));
+    padding-top: var(--safe-top);
+    padding-inline: var(--space-3);
+    background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+
+  .app-bottomnav {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: var(--z-bottomnav);
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    height: calc(var(--bottomnav-height) + var(--safe-bottom));
+    padding-bottom: var(--safe-bottom);
+    background: var(--surface-1);
+    border-top: var(--border-width) solid var(--border-subtle);
+  }
+
+  /* Clear the bottom nav and the floating add button. */
+  .app-main {
+    padding: var(--space-4) var(--space-4)
+      calc(var(--bottomnav-height) + var(--safe-bottom) + var(--space-10));
+  }
+
+  .grid--sidebar-right {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* -------- Below 768px: single column, table becomes cards ---------------- */
+@media (max-width: 767px) {
+  .grid--summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid--halves { grid-template-columns: minmax(0, 1fr); }
+
+  .page-header {
+    align-items: flex-start;
+    margin-bottom: var(--space-4);
+  }
+
+  .page-header__actions { width: 100%; }
+
+  /* The ledger table is replaced by transaction cards, not horizontally
+     scrolled — a scrolled financial table hides the amount column, which is
+     the one column that must always be visible. */
+  .ledger-table { display: none; }
+  .ledger-cards { display: flex; }
+}
+
+@media (min-width: 768px) {
+  .ledger-cards { display: none; }
+  .ledger-table { display: table; }
+}
+
+/* -------- Very small phones ---------------------------------------------- */
+@media (max-width: 380px) {
+  .grid--summary { grid-template-columns: minmax(0, 1fr); }
+  .u-text-3xl { font-size: var(--text-2xl); }
+}
+
+/* -------- Coarse pointers: enforce touch targets everywhere --------------- */
+@media (pointer: coarse) {
+  button,
+  a.btn,
+  .nav-item,
+  [role="button"] {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+  }
+}

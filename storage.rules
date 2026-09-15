@@ -1,0 +1,116 @@
+rules_version = '2';
+
+// ===========================================================================
+// PMExps — Firebase Storage Security Rules
+//
+// Every object lives under a workspace-scoped path, so tenant isolation comes
+// from the path itself. There are no public objects and no unrestricted
+// download URLs: the client requests a short-lived URL at view time.
+//
+// Reads require active membership. Writes additionally require a role that
+// may create entries, and are bounded by content type and size — the same
+// limits the client and the upload function enforce, checked here as the
+// layer that cannot be bypassed.
+// ===========================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Storage rules can read Firestore, so membership is checked against the
+    // same authoritative member document the Firestore rules use.
+    function memberDoc(wid) {
+      return firestore.get(/databases/(default)/documents/workspaces/$(wid)/members/$(request.auth.uid)).data;
+    }
+
+    function isMember(wid) {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/workspaces/$(wid)/members/$(request.auth.uid))
+        && memberDoc(wid).status == 'active';
+    }
+
+    function isSuperAdmin(wid) {
+      return isMember(wid) && memberDoc(wid).role == 'superAdmin';
+    }
+
+    function canWriteEntries(wid) {
+      return isMember(wid) && memberDoc(wid).role in ['superAdmin', 'accountant'];
+    }
+
+    function isAllowedType() {
+      return request.resource.contentType in [
+        'image/jpeg', 'image/png', 'image/webp', 'application/pdf'
+      ];
+    }
+
+    function isWithinSize() {
+      return request.resource.size > 0 && request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    // -------------------------------------------------------------------
+    // Ledger entry attachments: bills, receipts, invoices, payment proof
+    // -------------------------------------------------------------------
+    match /workspaces/{wid}/entries/{entryId}/{fileName} {
+      allow read: if isMember(wid);
+
+      allow create: if canWriteEntries(wid) && isAllowedType() && isWithinSize();
+
+      // Overwriting an existing object is refused. A confirmed entry's
+      // supporting document must never be silently replaced; a new
+      // attachment gets a new ID.
+      allow update: if false;
+
+      // Removal is permitted only while the parent entry is still a draft.
+      allow delete: if canWriteEntries(wid)
+        && firestore.get(/databases/(default)/documents/workspaces/$(wid)/ledgerEntries/$(entryId)).data.status == 'draft';
+    }
+
+    // -------------------------------------------------------------------
+    // Transfer attachments — same rules, different parent
+    // -------------------------------------------------------------------
+    match /workspaces/{wid}/transfers/{transferId}/{fileName} {
+      allow read: if isMember(wid);
+      allow create: if canWriteEntries(wid) && isAllowedType() && isWithinSize();
+      allow update: if false;
+      allow delete: if canWriteEntries(wid)
+        && firestore.get(/databases/(default)/documents/workspaces/$(wid)/transfers/$(transferId)).data.status == 'draft';
+    }
+
+    // -------------------------------------------------------------------
+    // Workspace branding — the logo printed on PDF reports
+    // -------------------------------------------------------------------
+    match /workspaces/{wid}/branding/{fileName} {
+      allow read: if isMember(wid);
+      allow write: if isSuperAdmin(wid)
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']
+        && request.resource.size <= 2 * 1024 * 1024;
+    }
+
+    // -------------------------------------------------------------------
+    // User avatars — own file only
+    // -------------------------------------------------------------------
+    match /users/{uid}/avatar/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']
+        && request.resource.size <= 2 * 1024 * 1024;
+    }
+
+    // -------------------------------------------------------------------
+    // Server-generated exports (scheduled PDF/CSV). Written by functions
+    // using the Admin SDK, which bypasses these rules.
+    // -------------------------------------------------------------------
+    match /workspaces/{wid}/exports/{fileName} {
+      allow read: if isMember(wid);
+      allow write: if false;
+    }
+
+    // Deny everything else.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

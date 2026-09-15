@@ -1,0 +1,45 @@
+/* ==========================================================================
+   PMExps — Utilities
+   A deliberately small set. Anything used more than a few times becomes a
+   component class instead, so this file does not grow into a framework.
+   ========================================================================== */
+
+.u-hidden { display: none !important; }
+[hidden] { display: none !important; }
+
+.u-text-secondary { color: var(--text-secondary); }
+.u-text-muted { color: var(--text-muted); }
+.u-text-success { color: var(--success-text); }
+.u-text-warning { color: var(--warning-text); }
+.u-text-danger { color: var(--danger-text); }
+
+.u-text-xs { font-size: var(--text-xs); }
+.u-text-sm { font-size: var(--text-sm); }
+.u-text-lg { font-size: var(--text-lg); }
+.u-text-xl { font-size: var(--text-xl); }
+.u-text-2xl { font-size: var(--text-2xl); }
+.u-text-3xl { font-size: var(--text-3xl); letter-spacing: var(--tracking-tight); }
+
+.u-weight-medium { font-weight: var(--weight-medium); }
+.u-weight-semibold { font-weight: var(--weight-semibold); }
+
+.u-text-right { text-align: right; }
+.u-text-center { text-align: center; }
+.u-nowrap { white-space: nowrap; }
+
+/* Truncate a long description without breaking table layout. */
+.u-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.u-flex-1 { flex: 1 1 auto; min-width: 0; }
+.u-mt-auto { margin-top: auto; }
+.u-full-width { width: 100%; }
+
+.u-gap-1 { gap: var(--space-1); }
+.u-gap-2 { gap: var(--space-2); }
+.u-gap-3 { gap: var(--space-3); }
+.u-gap-4 { gap: var(--space-4); }

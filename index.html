@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PMExps — Daily Ledger</title>
+    <meta name="description" content="Daily income, expense and transfer ledger for personal, family and small-business accounts." />
+
+    <!--
+      Content Security Policy.
+      GitHub Pages cannot send HTTP headers, so the policy is delivered as a
+      meta tag. Sources are the Firebase endpoints this app actually calls and
+      nothing else. There is no 'unsafe-inline' for scripts: the only inline
+      script on the page is the theme bootstrap below, which carries a nonce-
+      free hash allowance via 'unsafe-hashes' avoidance — it is instead moved
+      to a hashed entry at build time by scripts/build-csp.js. During local
+      development the meta tag is relaxed by the dev server, never in CI.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' https://www.gstatic.com;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.firebasestorage.app;
+        font-src 'self';
+        connect-src 'self'
+          https://*.googleapis.com
+          https://*.firebaseio.com
+          https://firestore.googleapis.com
+          https://identitytoolkit.googleapis.com
+          https://securetoken.googleapis.com
+          https://firebasestorage.googleapis.com
+          https://*.firebasestorage.app
+          https://asia-south1-pmexps.cloudfunctions.net
+          wss://*.firebaseio.com;
+        frame-src 'self' https://pmexps.firebaseapp.com;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+      "
+    />
+
+    <meta name="theme-color" content="#0c1017" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f6fa" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="PMExps" />
+
+    <!--
+      Theme bootstrap.
+
+      This runs before any stylesheet is applied so the correct theme is set
+      on the first paint. Deferring it to app.js would show one frame of the
+      wrong theme on every load — the "flash of wrong theme" the spec rules
+      out. It is deliberately tiny, synchronous, and dependency-free.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('pmexps:theme') || 'dark';
+          var resolved =
+            stored === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+              : stored;
+          document.documentElement.setAttribute('data-theme', resolved);
+
+          var locale = localStorage.getItem('pmexps:locale') || 'en';
+          document.documentElement.setAttribute('lang', locale);
+        } catch (error) {
+          /* Private browsing blocks localStorage. Dark is already the default
+             on <html>, so failing silently leaves a correct page. */
+        }
+      })();
+    </script>
+
+    <!-- Order matters: tokens define the variables the rest consume. -->
+    <link rel="stylesheet" href="./css/tokens.css" />
+    <link rel="stylesheet" href="./css/themes.css" />
+    <link rel="stylesheet" href="./css/base.css" />
+    <link rel="stylesheet" href="./css/layout.css" />
+    <link rel="stylesheet" href="./css/utilities.css" />
+    <link rel="stylesheet" href="./css/responsive.css" />
+    <link rel="stylesheet" href="./css/print.css" media="print" />
+
+    <!-- Relative paths throughout, so the app works at both
+         https://user.github.io/pmexps/ and a custom domain root. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./assets/images/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/images/icon-180.png" />
+  </head>
+
+  <body>
+    <a class="skip-link sr-only-focusable" href="#main-content">Skip to main content</a>
+
+    <!--
+      Screen-reader live regions. Two of them, because a saved-successfully
+      status and a validation failure need different urgencies, and a single
+      region forces every message into one behaviour.
+    -->
+    <div id="sr-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="sr-alerts" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+    <!-- Shown until the app module takes over; replaced, not hidden, so no
+         stale markup is left in the accessibility tree. -->
+    <div id="app" class="app-shell" data-sidebar="expanded" data-drawer="closed">
+      <div class="app-boot" role="status">
+        <p class="u-text-secondary">Loading PMExps…</p>
+      </div>
+    </div>
+
+    <!--
+      No-JavaScript fallback. A ledger cannot work without JS, so say so
+      plainly rather than showing an empty page.
+    -->
+    <noscript>
+      <div style="padding: 2rem; max-width: 40rem; margin: 0 auto">
+        <h1>JavaScript is required</h1>
+        <p>
+          PMExps needs JavaScript to read your ledger and keep your data
+          secure. Enable it for this site, then reload the page.
+        </p>
+      </div>
+    </noscript>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

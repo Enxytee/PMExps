@@ -46,17 +46,16 @@ jobs:
           done
           echo "Role names are consistent."
 
-      - name: Assert no service-account credentials are committed
+      - name: Assert no credential files are committed
         run: |
-          # ':!.github/workflows' excludes this file from its own search.
-          # Without it the check matches the pattern written here and fails
-          # on a perfectly clean repository.
-          if git grep -nIE 'BEGIN PRIVATE KEY|"private_key_id"' \
-               -- . ':!.github/workflows'; then
-            echo "::error::A service-account credential appears to be committed."
+          # Checks FILE NAMES, not file contents. A content search keeps
+          # matching the pattern written in this very file, which produced a
+          # failure on a perfectly clean repository. Names cannot self-match.
+          if git ls-files | grep -iE 'service[-_]?account.*\.json|serviceAccountKey\.json|\.pem$|id_rsa|\.p12$'; then
+            echo "::error::A credential file appears to be committed. Remove it and rotate the key."
             exit 1
           fi
-          echo "No service-account credentials found."
+          echo "No credential files found."
 
   build:
     name: Build site

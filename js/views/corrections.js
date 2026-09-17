@@ -334,7 +334,22 @@ function formatValue(key, value) {
 
 /** @param {any[]} transfers @param {any[]} accounts @param {string} workspaceId @param {() => void} refresh */
 function transfersSection(transfers, accounts, workspaceId, refresh) {
-  const reversible = transfers.filter((t) => !t.reversedByTransferId && t.status === 'confirmed');
+  // A transfer can be reversed once. Excluded here:
+  //   - one already reversed (reversedByTransferId set)
+  //   - one that IS a reversal (reversalOfTransferId set)
+  //
+  // The second exclusion matters: without it, reversing a reversal is
+  // offered, then reversing that, and so on. Each round is arithmetically
+  // harmless but leaves a growing pile of cancelling pairs in the ledger that
+  // someone has to read past on every account statement for that date.
+  //
+  // If a reversal itself was a mistake, the honest fix is a fresh transfer
+  // describing what should have happened — not an undo of an undo.
+  const reversible = transfers.filter(
+    (t) => t.status === 'confirmed' && !t.reversedByTransferId && !t.reversalOfTransferId,
+  );
+
+  const reversals = transfers.filter((t) => t.reversalOfTransferId);
 
   return el(
     'section',
@@ -346,7 +361,17 @@ function transfersSection(transfers, accounts, workspaceId, refresh) {
       'A transfer cannot be edited. Reversing it records the opposite movement, so both appear on the account statement — which is what actually happened.',
     ),
     reversible.length === 0
-      ? el('div', { class: 'empty-state' }, el('p', { class: 'u-text-sm' }, 'No transfers to reverse.'))
+      ? el(
+          'div',
+          { class: 'empty-state' },
+          el('p', { class: 'u-text-sm' }, 'No transfers available to reverse.'),
+          reversals.length > 0 &&
+            el(
+              'p',
+              { class: 'u-text-xs u-text-muted' },
+              `${reversals.length} ${reversals.length === 1 ? 'transfer has' : 'transfers have'} already been reversed. A reversal cannot itself be reversed — record a new transfer instead.`,
+            ),
+        )
       : el(
           'div',
           { class: 'stack stack--tight' },

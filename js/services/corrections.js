@@ -420,6 +420,18 @@ export async function reverseTransfer({ workspaceId, transferId, reason, account
     throw new CorrectionError(ERROR_CODE.VALIDATION_FAILED, 'That transfer was already reversed.');
   }
 
+  // Reversing a reversal is refused. It would balance out correctly but leave
+  // an ever-growing chain of cancelling pairs on the account statement, and
+  // the real intent — "this movement should not have happened at all" — is
+  // already recorded by the first reversal. A genuinely new movement should
+  // be entered as a new transfer.
+  if (original.reversalOfTransferId) {
+    throw new CorrectionError(
+      ERROR_CODE.VALIDATION_FAILED,
+      'That entry is itself a reversal, so it cannot be reversed again. Record a new transfer instead.',
+    );
+  }
+
   // The reverse transfer swaps the two accounts and reuses the proven
   // transfer path, so the same balancing guarantees apply to the undo as to
   // the original.
@@ -433,6 +445,7 @@ export async function reverseTransfer({ workspaceId, transferId, reason, account
     referenceNumber: original.voucherNumber,
     remarks: trimmedReason,
     accounts,
+    reversalOfTransferId: transferId,
   });
 
   await updateDoc(doc(db, 'workspaces', workspaceId, 'transfers', transferId), {

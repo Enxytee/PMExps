@@ -194,7 +194,9 @@ export async function createTransfer(input) {
       status: TRANSFER_STATUS.CONFIRMED,
       outEntryId: outRef.id,
       inEntryId: inRef.id,
-      reversalOfTransferId: null,
+      // Set when this transfer exists to undo another one. It is what stops
+      // a reversal being reversed in turn.
+      reversalOfTransferId: input.reversalOfTransferId ?? null,
       reversedByTransferId: null,
       clientRequestId: requestId,
       createdBy: user.uid,

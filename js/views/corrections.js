@@ -334,22 +334,33 @@ function formatValue(key, value) {
 
 /** @param {any[]} transfers @param {any[]} accounts @param {string} workspaceId @param {() => void} refresh */
 function transfersSection(transfers, accounts, workspaceId, refresh) {
-  // A transfer can be reversed once. Excluded here:
-  //   - one already reversed (reversedByTransferId set)
-  //   - one that IS a reversal (reversalOfTransferId set)
+  // A transfer may be reversed once. Two kinds are excluded.
   //
-  // The second exclusion matters: without it, reversing a reversal is
-  // offered, then reversing that, and so on. Each round is arithmetically
-  // harmless but leaves a growing pile of cancelling pairs in the ledger that
-  // someone has to read past on every account statement for that date.
+  //   1. One already reversed — it has reversedByTransferId set.
+  //   2. One that IS a reversal — otherwise reversing a reversal is offered,
+  //      then reversing that, and so on. Each round balances out, but leaves
+  //      a growing pile of cancelling pairs that someone must read past on
+  //      every account statement for that date. If a reversal was itself a
+  //      mistake, the honest fix is a new transfer describing what should
+  //      have happened, not an undo of an undo.
   //
-  // If a reversal itself was a mistake, the honest fix is a fresh transfer
-  // describing what should have happened — not an undo of an undo.
-  const reversible = transfers.filter(
-    (t) => t.status === 'confirmed' && !t.reversedByTransferId && !t.reversalOfTransferId,
+  // Case 2 is detected two ways, and the second one matters. The forward
+  // marker reversalOfTransferId is only present on transfers created after
+  // that field existed; anything reversed before then has it empty. But the
+  // ORIGINAL always points at its reversal, so deriving the set of reversal
+  // IDs from those pointers identifies old and new alike, with no need to
+  // rewrite existing documents.
+  const reversalIds = new Set(
+    transfers.map((t) => t.reversedByTransferId).filter(Boolean),
   );
 
-  const reversals = transfers.filter((t) => t.reversalOfTransferId);
+  const isReversal = (t) => Boolean(t.reversalOfTransferId) || reversalIds.has(t.transferId);
+
+  const reversible = transfers.filter(
+    (t) => t.status === 'confirmed' && !t.reversedByTransferId && !isReversal(t),
+  );
+
+  const reversals = transfers.filter(isReversal);
 
   return el(
     'section',

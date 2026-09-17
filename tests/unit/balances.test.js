@@ -258,3 +258,48 @@ describe('correction arithmetic end to end', () => {
     expect(balances.find((b) => b.accountId === 'bank').closingPaise).toBe(0);
   });
 });
+
+describe('reversal detection', () => {
+  /**
+   * Mirrors the logic in views/corrections.js. A reversal must be identified
+   * even when it was created before the forward marker field existed, which
+   * is the case for anything already in a live workspace.
+   */
+  const findReversible = (transfers) => {
+    const reversalIds = new Set(transfers.map((t) => t.reversedByTransferId).filter(Boolean));
+    const isReversal = (t) => Boolean(t.reversalOfTransferId) || reversalIds.has(t.transferId);
+    return transfers.filter((t) => t.status === 'confirmed' && !t.reversedByTransferId && !isReversal(t));
+  };
+
+  it('offers a plain transfer', () => {
+    const list = [{ transferId: 'a', status: 'confirmed' }];
+    expect(findReversible(list).map((t) => t.transferId)).toEqual(['a']);
+  });
+
+  it('does not offer one already reversed', () => {
+    const list = [
+      { transferId: 'a', status: 'confirmed', reversedByTransferId: 'b' },
+      { transferId: 'b', status: 'confirmed', reversalOfTransferId: 'a' },
+    ];
+    expect(findReversible(list)).toEqual([]);
+  });
+
+  it('identifies a reversal that predates the marker field', () => {
+    // 'b' has no reversalOfTransferId — the state of every reversal created
+    // before that field was added.
+    const list = [
+      { transferId: 'a', status: 'reversed', reversedByTransferId: 'b' },
+      { transferId: 'b', status: 'confirmed' },
+    ];
+    expect(findReversible(list)).toEqual([]);
+  });
+
+  it('still offers an unrelated transfer alongside a reversed pair', () => {
+    const list = [
+      { transferId: 'a', status: 'reversed', reversedByTransferId: 'b' },
+      { transferId: 'b', status: 'confirmed' },
+      { transferId: 'c', status: 'confirmed' },
+    ];
+    expect(findReversible(list).map((t) => t.transferId)).toEqual(['c']);
+  });
+});

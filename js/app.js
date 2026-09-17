@@ -1,120 +1,46 @@
 /**
- * PMExps — Application shell
+ * PMExps — Application entry point
  *
- * Guards the app, resolves which workspace to open, and renders the first
- * real screens: workspace picker, create workspace, and the dashboard shell.
- *
- * The guard order matters and is deliberate:
- *   1. Wait for the auth session to restore. Rendering before this shows a
- *      signed-in user a login redirect for one frame on every reload.
- *   2. No user → login page.
- *   3. User but no active membership → workspace picker. Being signed in is
- *      not access; a person with an account and no membership sees an empty
- *      picker, never someone else's ledger.
- *   4. Membership resolved → dashboard.
+ * Boots the session, resolves the workspace, registers routes and starts the
+ * router. Screens live in js/views; this file only decides who gets in.
  *
  * @module app
  */
 
-import { el, qs, replaceChildren, announce, setText } from './utils/dom.js';
-import { basePath, isProjectSite } from './utils/base-path.js';
-import { todayLedgerDate, formatLedgerDate, financialYear } from './utils/dates.js';
-import { formatPaise } from './utils/money.js';
-import { APP, ROLE } from './config/constants.js';
-import { getPreference, setTheme, cycleTheme, watchSystemTheme } from './services/theme.js';
-import { waitForAuthReady, signOut, currentUser, getUserProfile } from './services/auth.js';
+import { el, qs, replaceChildren, announce } from './utils/dom.js';
+import { defineRoutes, startRouter, setOnNavigate, setGuard, navigate } from './router.js';
+import { buildShell, renderPage, pageHeader, refreshNavState } from './components/shell.js';
+import { setTheme, getPreference, watchSystemTheme } from './services/theme.js';
+import { waitForAuthReady, signOut, getUserProfile } from './services/auth.js';
 import {
-  listMyWorkspaces,
   resolveActiveWorkspace,
+  listMyWorkspaces,
   setActiveWorkspaceId,
   createWorkspace,
-  loadMasterData,
 } from './services/workspaces.js';
-
-/** Human labels for roles. These move to the localisation files in Phase 8. */
-const ROLE_LABEL = {
-  [ROLE.SUPER_ADMIN]: 'Super Admin',
-  [ROLE.ACCOUNTANT]: 'Accountant',
-  [ROLE.VIEWER]: 'Viewer',
-};
-
-const root = () => qs('#app');
+import { setContext, getState } from './state.js';
+import { ROLE } from './config/constants.js';
+import { renderDashboard, renderLedger, renderDrafts } from './views/ledger.js';
+import { renderEntryForm } from './views/entry-form.js';
+import { renderSettings } from './views/settings.js';
+import { field, textInput, select, setBusy, setFormError } from './components/ui.js';
 
 /* -------------------------------------------------------------------------
-   Shared chrome
+   Pre-shell screens
+   These render into #app directly, because the navigation frame would be
+   meaningless before a workspace is chosen.
    ------------------------------------------------------------------------- */
 
-function pageHeader({ title, subtitle, actions = [] }) {
-  return el(
-    'header',
-    { class: 'page-header' },
-    el(
-      'div',
-      { class: 'page-header__titles' },
-      el('h1', {}, title),
-      subtitle && el('p', { class: 'page-header__subtitle' }, subtitle),
-    ),
-    el('div', { class: 'page-header__actions' }, ...actions),
-  );
-}
-
-function themeButton() {
-  const button = el(
-    'button',
-    {
-      class: 'btn',
-      type: 'button',
-      onClick: () => {
-        const next = cycleTheme();
-        button.textContent = `Theme: ${next}`;
-        announce(`Theme set to ${next}`);
-      },
-    },
-    `Theme: ${getPreference()}`,
-  );
-  return button;
-}
-
-function signOutButton() {
-  return el(
-    'button',
-    {
-      class: 'btn',
-      type: 'button',
-      onClick: async () => {
-        setActiveWorkspaceId(null);
-        await signOut();
-        window.location.replace('./login.html');
-      },
-    },
-    'Sign out',
-  );
-}
-
-function showError(message) {
+function fullPage(...children) {
   replaceChildren(
-    root(),
-    el(
-      'main',
-      { id: 'main-content', class: 'app-main' },
-      el(
-        'div',
-        { class: 'page stack' },
-        el('div', { class: 'alert alert--danger' }, message),
-        el(
-          'button',
-          { class: 'btn', type: 'button', onClick: () => window.location.reload() },
-          'Reload',
-        ),
-      ),
-    ),
+    qs('#app'),
+    el('main', { id: 'main-content', class: 'app-main' }, el('div', { class: 'page stack form-page' }, ...children)),
   );
-  announce(message, 'assertive');
 }
 
-function showLoading(label = 'Loading your ledger') {
+function showLoading() {
   replaceChildren(
-    root(),
+    qs('#app'),
     el(
       'main',
       { id: 'main-content', class: 'app-main' },
@@ -130,124 +56,90 @@ function showLoading(label = 'Loading your ledger') {
           el('div', { class: 'skeleton', style: { height: '96px' } }),
           el('div', { class: 'skeleton', style: { height: '96px' } }),
         ),
-        el('p', { class: 'sr-only', role: 'status' }, label),
+        el('p', { class: 'sr-only', role: 'status' }, 'Loading your ledger'),
       ),
     ),
   );
 }
 
-/* -------------------------------------------------------------------------
-   Workspace picker
-   ------------------------------------------------------------------------- */
+/** @param {string} message */
+function showError(message) {
+  fullPage(
+    el('h1', {}, 'Something went wrong'),
+    el('div', { class: 'alert alert--danger' }, message),
+    el('button', { class: 'btn', type: 'button', onClick: () => window.location.reload() }, 'Reload'),
+  );
+  announce(message, 'assertive');
+}
 
+/** @param {any[]} workspaces */
 function renderWorkspacePicker(workspaces) {
-  const user = currentUser();
+  const { user } = getState();
 
-  const list = workspaces.length
-    ? el(
-        'div',
-        { class: 'stack' },
-        ...workspaces.map((workspace) =>
-          el(
-            'button',
-            {
-              class: 'card card--interactive',
-              type: 'button',
-              onClick: () => {
-                setActiveWorkspaceId(workspace.workspaceId);
-                start();
-              },
-            },
-            el('p', { class: 'card__title' }, workspace.name),
+  fullPage(
+    el('h1', {}, 'Choose a workspace'),
+    el('p', { class: 'u-text-secondary u-text-sm' }, user?.email ?? ''),
+
+    workspaces.length
+      ? el(
+          'div',
+          { class: 'stack' },
+          ...workspaces.map((workspace) =>
             el(
-              'p',
-              { class: 'card__meta' },
-              `${ROLE_LABEL[workspace.role] ?? workspace.role} · ${workspace.type}`,
+              'button',
+              {
+                class: 'card card--interactive',
+                type: 'button',
+                onClick: () => {
+                  setActiveWorkspaceId(workspace.workspaceId);
+                  boot();
+                },
+              },
+              el('p', { class: 'card__title' }, workspace.name),
+              el('p', { class: 'card__meta' }, `${workspace.role} · ${workspace.type}`),
             ),
           ),
+        )
+      : el(
+          'div',
+          { class: 'empty-state' },
+          el('p', { class: 'u-weight-medium' }, 'You are not in any workspace yet'),
+          el('p', { class: 'u-text-sm' }, 'Create one below, or ask a Super Admin to invite you.'),
         ),
-      )
-    : el(
-        'div',
-        { class: 'empty-state' },
-        el('p', { class: 'u-weight-medium' }, 'You are not in any workspace yet'),
-        el(
-          'p',
-          { class: 'u-text-sm' },
-          'Create one to start your ledger, or ask a Super Admin to invite you.',
-        ),
-      );
 
-  replaceChildren(
-    root(),
+    el('hr'),
+    createWorkspaceForm(),
     el(
-      'main',
-      { id: 'main-content', class: 'app-main' },
-      el(
-        'div',
-        { class: 'page stack form-page' },
-        pageHeader({
-          title: 'Choose a workspace',
-          subtitle: user?.email ?? '',
-          actions: [themeButton(), signOutButton()],
-        }),
-        list,
-        el('hr'),
-        renderCreateWorkspaceForm(),
-      ),
+      'button',
+      {
+        class: 'btn btn--ghost',
+        type: 'button',
+        onClick: async () => {
+          setActiveWorkspaceId(null);
+          await signOut();
+          window.location.replace('./login.html');
+        },
+      },
+      'Sign out',
     ),
   );
 }
 
-function renderCreateWorkspaceForm() {
-  const state = { name: '', type: 'business' };
+function createWorkspaceForm() {
+  const form = { name: '', type: 'business' };
   const errorBox = el('div', {});
-
-  const nameInput = el('input', {
-    class: 'input',
-    id: 'ws-name',
-    type: 'text',
-    required: true,
-    placeholder: 'Patel Traders',
-    onInput: (e) => {
-      state.name = e.target.value;
-    },
-  });
-
-  const typeSelect = el(
-    'select',
-    {
-      class: 'select',
-      id: 'ws-type',
-      onChange: (e) => {
-        state.type = e.target.value;
-      },
-    },
-    el('option', { value: 'business' }, 'Small business'),
-    el('option', { value: 'family' }, 'Family'),
-    el('option', { value: 'personal' }, 'Personal'),
-  );
-
   const submit = el('button', { class: 'btn btn--primary', type: 'submit' }, 'Create workspace');
 
   async function onSubmit(event) {
     event.preventDefault();
-    replaceChildren(errorBox);
-    submit.disabled = true;
-    submit.setAttribute('aria-busy', 'true');
-    setText(submit, 'Creating…');
-
+    setFormError(errorBox, null);
+    const restore = setBusy(submit, 'Creating…');
     try {
-      await createWorkspace({ name: state.name, type: state.type });
-      announce('Workspace created');
-      start();
+      await createWorkspace({ name: form.name, type: form.type });
+      boot();
     } catch (error) {
-      const message = error?.message ?? 'Could not create the workspace.';
-      replaceChildren(errorBox, el('div', { class: 'alert alert--danger' }, message));
-      announce(message, 'assertive');
-      submit.disabled = false;
-      submit.removeAttribute('aria-busy');
-      setText(submit, 'Create workspace');
+      setFormError(errorBox, error?.message ?? 'Could not create the workspace.');
+      restore();
     }
   }
 
@@ -260,184 +152,83 @@ function renderCreateWorkspaceForm() {
       { class: 'u-text-secondary u-text-sm' },
       'You become its Super Admin. Default accounts and categories are set up for you.',
     ),
-    el(
-      'div',
-      { class: 'field' },
-      el('label', { class: 'field__label', for: 'ws-name' }, 'Workspace name'),
-      nameInput,
-    ),
-    el(
-      'div',
-      { class: 'field' },
-      el('label', { class: 'field__label', for: 'ws-type' }, 'Type'),
-      typeSelect,
-    ),
+    field({
+      label: 'Workspace name',
+      required: true,
+      control: textInput({ placeholder: 'Patel Traders', onInput: (value) => { form.name = value; } }),
+    }),
+    field({
+      label: 'Type',
+      control: select({
+        value: form.type,
+        options: [
+          { value: 'business', label: 'Small business' },
+          { value: 'family', label: 'Family' },
+          { value: 'personal', label: 'Personal' },
+        ],
+        onChange: (value) => { form.type = value; },
+      }),
+    }),
     errorBox,
     submit,
   );
 }
 
 /* -------------------------------------------------------------------------
-   Dashboard shell
+   Routes
    ------------------------------------------------------------------------- */
 
-async function renderDashboard(workspaceId, membership) {
-  const { accounts, categories } = await loadMasterData(workspaceId);
-  const today = todayLedgerDate();
-  const fy = financialYear(today);
-  const user = currentUser();
+function registerRoutes() {
+  defineRoutes([
+    { path: '/', title: 'Dashboard', render: renderDashboard },
+    { path: '/ledger', title: 'Daily ledger', render: renderLedger },
+    { path: '/drafts', title: 'Drafts', render: renderDrafts, writer: true },
+    { path: '/entry/new', title: 'Add entry', render: renderEntryForm, writer: true },
+    { path: '/entry/:entryId', title: 'Edit entry', render: renderEntryForm, writer: true },
+    { path: '/settings', title: 'Settings', render: renderSettings },
+    {
+      path: '/404',
+      title: 'Not found',
+      render: () =>
+        renderPage(
+          pageHeader({ title: 'Page not found' }),
+          el('div', { class: 'alert alert--warning' }, 'That page does not exist in PMExps.'),
+          el('button', { class: 'btn', type: 'button', onClick: () => navigate('/') }, 'Go to dashboard'),
+        ),
+    },
+  ]);
 
-  const activeAccounts = accounts.filter((a) => a.isActive);
-  const incomeCategories = categories.filter((c) => c.type === 'income' && c.isActive);
-  const expenseCategories = categories.filter((c) => c.type === 'expense' && c.isActive);
+  // Routes that write need a role that may write. The check is repeated in
+  // Firestore rules, so this only saves the user from a form that would fail.
+  setGuard((context, route) => {
+    if (!route.writer) return true;
+    const { role } = getState();
+    if (role === ROLE.SUPER_ADMIN || role === ROLE.ACCOUNTANT) return true;
 
-  const firstName = String(membership.displayNameSnapshot ?? '').split(' ')[0];
-
-  replaceChildren(
-    root(),
-    el(
-      'main',
-      { id: 'main-content', class: 'app-main' },
+    renderPage(
+      pageHeader({ title: 'Not available to you' }),
       el(
         'div',
-        { class: 'page stack stack--loose' },
-
-        pageHeader({
-          title: firstName ? `Welcome, ${firstName}` : 'Dashboard',
-          subtitle: `${ROLE_LABEL[membership.role] ?? membership.role} · ${formatLedgerDate(today, { style: 'long' })}`,
-          actions: [
-            el(
-              'button',
-              {
-                class: 'btn',
-                type: 'button',
-                onClick: () => {
-                  setActiveWorkspaceId(null);
-                  start();
-                },
-              },
-              'Switch workspace',
-            ),
-            themeButton(),
-            signOutButton(),
-          ],
-        }),
-
-        el(
-          'section',
-          { class: 'grid grid--summary', 'aria-label': 'Today' },
-          statCard("Today's income", formatPaise(0), 'No entries yet'),
-          statCard("Today's expenses", formatPaise(0), 'No entries yet'),
-          statCard('Net cash flow', formatPaise(0), 'Income minus expenses'),
-          statCard('Financial year', fy.label, `${fy.startDate} to ${fy.endDate}`),
-        ),
-
-        el(
-          'section',
-          { class: 'stack' },
-          el('h2', {}, 'Accounts'),
-          el(
-            'div',
-            { class: 'grid grid--summary' },
-            ...activeAccounts.map((account) =>
-              el(
-                'article',
-                { class: 'card' },
-                el('p', { class: 'u-text-muted u-text-xs' }, account.name),
-                el(
-                  'p',
-                  { class: 'u-text-lg u-weight-semibold tnum' },
-                  formatPaise(account.openingBalancePaise ?? 0),
-                ),
-                el('p', { class: 'card__meta' }, `Opening balance · ${account.type}`),
-              ),
-            ),
-          ),
-        ),
-
-        el(
-          'section',
-          { class: 'stack' },
-          el('h2', {}, 'Categories'),
-          el(
-            'div',
-            { class: 'grid grid--halves' },
-            categoryList('Income', incomeCategories),
-            categoryList('Expense', expenseCategories),
-          ),
-        ),
-
-        el(
-          'section',
-          { class: 'stack' },
-          el('h2', {}, 'Workspace check'),
-          el(
-            'dl',
-            { class: 'stack stack--tight u-text-sm' },
-            defRow('Workspace ID', workspaceId),
-            defRow('Your role', ROLE_LABEL[membership.role] ?? membership.role),
-            defRow('Signed in as', user?.email ?? ''),
-            defRow('Accounts seeded', String(accounts.length)),
-            defRow('Categories seeded', String(categories.length)),
-            defRow('Base path', basePath + (isProjectSite() ? ' (project site)' : '')),
-            defRow('Version', APP.version),
-          ),
-          el(
-            'div',
-            { class: 'alert alert--info' },
-            'Phase 2 of 10. Entries, transfers and reports arrive in the next phases.',
-          ),
-        ),
+        { class: 'alert alert--info' },
+        'Your role can view the ledger and reports, but not create entries. Ask a Super Admin if this looks wrong.',
       ),
-    ),
-  );
-}
+      el('button', { class: 'btn', type: 'button', onClick: () => navigate('/') }, 'Back to dashboard'),
+    );
+    return false;
+  });
 
-function categoryList(label, items) {
-  return el(
-    'article',
-    { class: 'card' },
-    el('p', { class: 'card__title' }, label),
-    el(
-      'ul',
-      {
-        class: 'stack stack--tight u-text-sm',
-        style: { 'list-style': 'none', padding: '0', 'margin-top': 'var(--space-3)' },
-      },
-      ...items.map((category) => el('li', {}, category.name)),
-    ),
-  );
-}
-
-function statCard(label, value, detail) {
-  return el(
-    'article',
-    { class: 'card' },
-    el('p', { class: 'u-text-muted u-text-xs' }, label),
-    el('p', { class: 'u-text-2xl u-weight-semibold tnum' }, value),
-    el('p', { class: 'u-text-muted u-text-xs u-truncate', title: detail }, detail),
-  );
-}
-
-function defRow(term, value) {
-  return el(
-    'div',
-    { class: 'row row--between u-gap-4' },
-    el('dt', { class: 'u-text-muted' }, term),
-    el('dd', { class: 'u-truncate', style: { margin: '0' } }, value),
-  );
+  setOnNavigate(refreshNavState);
 }
 
 /* -------------------------------------------------------------------------
    Boot
    ------------------------------------------------------------------------- */
 
-async function start() {
+async function boot() {
   showLoading();
 
   try {
     const user = await waitForAuthReady();
-
     if (!user) {
       window.location.replace('./login.html');
       return;
@@ -451,18 +242,20 @@ async function start() {
     }
 
     const active = await resolveActiveWorkspace();
-
     if (!active) {
+      setContext({ user, workspaceId: null, membership: null });
       renderWorkspacePicker(await listMyWorkspaces());
       return;
     }
 
-    await renderDashboard(active.workspaceId, active.membership);
+    setContext({ user, workspaceId: active.workspaceId, membership: active.membership });
+
+    buildShell();
+    registerRoutes();
+    await startRouter();
   } catch (error) {
     console.error('[PMExps] Startup failed', error);
-    showError(
-      error?.message ?? 'Could not load your ledger. Check your connection and reload.',
-    );
+    showError(error?.message ?? 'Could not load your ledger. Check your connection and reload.');
   }
 }
 
@@ -470,7 +263,7 @@ setTheme(getPreference(), { animate: false });
 watchSystemTheme();
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => start(), { once: true });
+  document.addEventListener('DOMContentLoaded', () => boot(), { once: true });
 } else {
-  start();
+  boot();
 }

@@ -215,3 +215,248 @@
   border-radius: var(--radius-lg);
   color: var(--text-secondary);
 }
+
+/* ==========================================================================
+   Navigation
+   ========================================================================== */
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-5);
+}
+
+.sidebar__brand img { border-radius: var(--radius-sm); }
+
+.sidebar__nav { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.sidebar__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-5);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.nav-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+/* The active item carries a left rule as well as a colour change, so it is
+   still identifiable without colour perception. aria-current backs it up for
+   screen readers. */
+.nav-item.is-active {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.bottomnav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+}
+
+.bottomnav__item.is-active { color: var(--accent); }
+.bottomnav__item.is-active svg { stroke-width: 2.2; }
+
+/* ==========================================================================
+   Ledger table and transaction cards
+   ========================================================================== */
+
+.ledger-table {
+  width: 100%;
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  font-size: var(--text-sm);
+}
+
+.ledger-table thead th {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 1;
+  background: var(--surface-3);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  border-bottom: var(--border-width) solid var(--border-default);
+}
+
+.ledger-table tbody td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.ledger-table tbody tr:last-child td { border-bottom: none; }
+.ledger-table tbody tr:hover { background: var(--surface-hover); }
+
+.ledger-table th.money,
+.ledger-table td.money {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.txn-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* ==========================================================================
+   Tabs and segmented control
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: var(--border-width) solid var(--border-subtle);
+}
+
+.tab {
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.tab:hover { color: var(--text-primary); }
+.tab.is-selected { color: var(--text-primary); border-bottom-color: var(--accent); }
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--bg-sunken);
+  border: var(--border-width) solid var(--border-input);
+  border-radius: var(--radius-md);
+}
+
+.segmented__option {
+  min-height: 38px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.segmented__option.is-selected {
+  background: var(--surface-3);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ==========================================================================
+   Dialog and toasts
+   ========================================================================== */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--overlay);
+  animation: fade-in var(--duration-fast) var(--ease-standard);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-6);
+  background: var(--surface-4);
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  animation: dialog-in var(--duration-slow) var(--ease-decelerate);
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.toast-region {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(var(--space-4) + var(--safe-bottom));
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.toast {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-4);
+  border: var(--border-width) solid var(--border-default);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
+  animation: toast-in var(--duration-slow) var(--ease-decelerate);
+}
+
+.toast--success { border-left-color: var(--success); }
+.toast--danger { border-left-color: var(--danger); }
+.toast--warning { border-left-color: var(--warning); }
+.toast--info { border-left-color: var(--info); }
+.toast.is-leaving { opacity: 0; transition: opacity var(--duration-normal) var(--ease-standard); }
+
+@media (max-width: 767px) {
+  .toast-region {
+    left: var(--space-4);
+    right: var(--space-4);
+    bottom: calc(var(--bottomnav-height) + var(--safe-bottom) + var(--space-3));
+  }
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-backdrop, .dialog, .toast { animation: none; }
+}
+
+.card.is-inactive { opacity: 0.62; }

@@ -109,3 +109,199 @@
 
   .page-break { page-break-before: always; }
 }
+
+/* ==========================================================================
+   A4 sheet
+   Laid out to real millimetres so what appears on screen is what comes out of
+   the printer. On screen it sits on a neutral backdrop like a sheet of paper.
+   ========================================================================== */
+
+.print-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: 210mm;
+  margin: var(--space-5) auto var(--space-4);
+}
+
+.a4-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto var(--space-8);
+  padding: 14mm 12mm 16mm;
+  background: #fff;
+  color: #111;
+  box-shadow: var(--shadow-lg);
+  font-size: 10pt;
+  line-height: 1.35;
+}
+
+/* Gujarati needs more vertical room: matras sit above and below the base
+   letter, and at 10pt with tight leading they collide with the row above. */
+.a4-sheet[lang='gu'] {
+  font-family: var(--font-gujarati);
+  line-height: 1.6;
+}
+
+.a4-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8mm;
+  padding-bottom: 4mm;
+  margin-bottom: 4mm;
+  border-bottom: 0.6pt solid #333;
+}
+
+.a4-business {
+  margin: 0;
+  font-size: 15pt;
+  font-weight: 700;
+  color: #111;
+  letter-spacing: 0;
+}
+
+.a4-title-block { text-align: right; }
+
+.a4-title {
+  margin: 0;
+  font-size: 12pt;
+  font-weight: 600;
+  color: #111;
+}
+
+.a4-meta {
+  margin: 1mm 0 0;
+  font-size: 8.5pt;
+  color: #444;
+}
+
+.a4-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.a4-table th {
+  background: #eee;
+  border: 0.4pt solid #888;
+  padding: 1.6mm 1.6mm;
+  text-align: left;
+  font-weight: 600;
+  font-size: 8.5pt;
+}
+
+.a4-table td {
+  border: 0.4pt solid #aaa;
+  padding: 1.4mm 1.6mm;
+  vertical-align: top;
+}
+
+.a4-table .money {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.a4-voucher { white-space: nowrap; font-size: 8pt; }
+.a4-party { color: #555; font-size: 8pt; }
+
+.a4-row--opening td,
+.a4-row--total td,
+.a4-row--closing td {
+  background: #f2f2f2;
+  font-weight: 600;
+}
+
+.a4-row--closing td { border-top: 1pt solid #333; }
+
+.a4-empty {
+  padding: 20mm 0;
+  text-align: center;
+  color: #666;
+}
+
+.a4-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10mm;
+  margin-top: 8mm;
+}
+
+.a4-notes {
+  flex: 1;
+  font-size: 7.5pt;
+  color: #555;
+}
+
+.a4-notes p { margin: 0 0 1mm; }
+
+.a4-signature {
+  width: 55mm;
+  text-align: center;
+  font-size: 8.5pt;
+}
+
+.a4-signature__line {
+  height: 12mm;
+  border-bottom: 0.6pt solid #333;
+  margin-bottom: 1.5mm;
+}
+
+.a4-generated {
+  margin-top: 6mm;
+  font-size: 7.5pt;
+  color: #666;
+  text-align: right;
+}
+
+@media print {
+  .print-controls { display: none !important; }
+
+  .a4-sheet {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  /* The header repeats at the top of every page and the totals at the bottom,
+     so a ledger running to three pages still reads correctly on page three.
+     Rows never split across a page break. */
+  .a4-table thead { display: table-header-group; }
+  .a4-table tfoot { display: table-footer-group; }
+  .a4-table tr { page-break-inside: avoid; break-inside: avoid; }
+
+  .a4-footer,
+  .a4-generated { page-break-inside: avoid; break-inside: avoid; }
+
+  .a4-table th {
+    background: #eee !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .a4-row--opening td,
+  .a4-row--total td,
+  .a4-row--closing td {
+    background: #f2f2f2 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* Page numbers. CSS cannot count pages in a browser print, so the number is
+   placed by the @page margin box where supported and simply absent where it
+   is not — rather than printing a wrong number, which would be worse on a
+   document someone files. */
+@page {
+  @bottom-right {
+    content: counter(page) ' / ' counter(pages);
+    font-size: 8pt;
+    color: #666;
+  }
+}

@@ -129,6 +129,11 @@ export async function renderLedger(context) {
           el('button', { class: 'btn', type: 'button', onClick: () => { ledgerDate = addDays(ledgerDate, -1); draw(); } }, 'Previous'),
           el('button', { class: 'btn', type: 'button', onClick: () => { ledgerDate = todayLedgerDate(); draw(); } }, 'Today'),
           el('button', { class: 'btn', type: 'button', onClick: () => { ledgerDate = addDays(ledgerDate, 1); draw(); } }, 'Next'),
+          el(
+            'button',
+            { class: 'btn', type: 'button', onClick: () => goTo(`/print/daily?date=${ledgerDate}`) },
+            'Print / Share',
+          ),
           role !== ROLE.VIEWER &&
             el('button', { class: 'btn btn--primary', type: 'button', onClick: () => goTo('/entry/new') }, 'Add entry'),
         ],
@@ -594,7 +599,7 @@ export async function renderDashboard() {
     el(
       'div',
       { class: 'alert alert--info' },
-      'Phase 7 of 10. Reports with CSV export are live. A4 PDF and WhatsApp sharing arrive next.',
+      'Phase 8 of 10. The daily ledger prints as an A4 page in English or Gujarati, and shares to WhatsApp.',
     ),
   );
 }

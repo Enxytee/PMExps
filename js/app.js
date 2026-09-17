@@ -27,6 +27,7 @@ import { renderTransfer } from './views/transfer.js';
 import { renderAudit } from './views/audit.js';
 import { renderCorrections, renderCorrectionRequest } from './views/corrections.js';
 import { renderReports } from './views/reports.js';
+import { renderPrintDaily } from './views/print-daily.js';
 import { field, textInput, select, setBusy, setFormError } from './components/ui.js';
 
 /* -------------------------------------------------------------------------
@@ -191,6 +192,7 @@ function registerRoutes() {
     { path: '/entry/:entryId', title: 'Edit entry', render: renderEntryForm, writer: true },
     { path: '/transfer', title: 'Transfer', render: renderTransfer, writer: true },
     { path: '/reports', title: 'Reports', render: renderReports },
+    { path: '/print/daily', title: 'Print daily ledger', render: renderPrintDaily },
     { path: '/corrections', title: 'Corrections', render: renderCorrections },
     { path: '/correct/:entryId', title: 'Request correction', render: renderCorrectionRequest, writer: true },
     { path: '/audit', title: 'Audit log', render: renderAudit },

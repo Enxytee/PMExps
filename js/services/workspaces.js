@@ -35,6 +35,7 @@ const {
   query,
   where,
   writeBatch,
+  updateDoc,
   serverTimestamp,
   collectionGroup,
 } = firestore;
@@ -428,4 +429,51 @@ export async function loadMasterData(workspaceId) {
     accounts: accountsSnapshot.docs.map((d) => d.data()).sort(bySortOrder),
     categories: categoriesSnapshot.docs.map((d) => d.data()).sort(bySortOrder),
   };
+}
+
+/**
+ * The details printed at the top of a ledger page.
+ * @param {string} workspaceId
+ * @returns {Promise<{businessName: string, address: string, contactPhone: string, contactEmail: string}>}
+ */
+export async function loadWorkspaceDetails(workspaceId) {
+  const snapshot = await getDoc(doc(db, 'workspaces', workspaceId));
+  const data = snapshot.exists() ? snapshot.data() : {};
+  return {
+    businessName: data.businessName ?? '',
+    address: data.address ?? '',
+    contactPhone: data.contactPhone ?? '',
+    contactEmail: data.contactEmail ?? '',
+  };
+}
+
+/**
+ * Save them. Only descriptive fields are sent; the security rules reject any
+ * attempt to touch ownership, member count or currency through this path, so
+ * a bug here cannot become a privilege problem.
+ *
+ * @param {string} workspaceId
+ * @param {Record<string, any>} details
+ * @returns {Promise<void>}
+ */
+export async function saveWorkspaceDetails(workspaceId, details) {
+  const current = await getDoc(doc(db, 'workspaces', workspaceId));
+  const existing = current.exists() ? current.data() : {};
+
+  await updateDoc(doc(db, 'workspaces', workspaceId), {
+    // name is required by the rules to stay a valid 1-100 character string,
+    // so it is carried through unchanged rather than left out.
+    name: existing.name,
+    businessName: nullIfEmpty(details.businessName),
+    address: nullIfEmpty(details.address),
+    contactPhone: nullIfEmpty(details.contactPhone),
+    contactEmail: nullIfEmpty(details.contactEmail),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** @param {unknown} value @returns {string|null} */
+function nullIfEmpty(value) {
+  const text = String(value ?? '').trim();
+  return text === '' ? null : text;
 }

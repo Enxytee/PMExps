@@ -18,6 +18,7 @@ import { renderPage, pageHeader, goTo } from '../components/shell.js';
 import {
   field,
   textInput,
+  textArea,
   select,
   moneyInput,
   dateInput,
@@ -26,6 +27,7 @@ import {
   setFormError,
   confirmDialog,
 } from '../components/ui.js';
+import { loadWorkspaceDetails, saveWorkspaceDetails } from '../services/workspaces.js';
 import { getState, refreshMasterData } from '../state.js';
 import {
   createAccount,
@@ -48,9 +50,21 @@ const ACCOUNT_TYPE_LABEL = {
 };
 
 /** @param {import('../router.js').RouteContext} context */
+/** Current business details, loaded once per visit to the settings screen. */
+let workspaceDetails = {
+  businessName: '',
+  address: '',
+  contactPhone: '',
+  contactEmail: '',
+};
+
 export async function renderSettings(context) {
   await refreshMasterData();
-  const { role } = getState();
+  const { role, workspaceId } = getState();
+
+  if (workspaceId) {
+    workspaceDetails = await loadWorkspaceDetails(workspaceId);
+  }
 
   if (role !== ROLE.SUPER_ADMIN) {
     renderPage(
@@ -65,7 +79,8 @@ export async function renderSettings(context) {
     return;
   }
 
-  let tab = context.query.get('tab') === 'categories' ? 'categories' : 'accounts';
+  const requested = context.query.get('tab');
+  let tab = ['categories', 'business'].includes(requested) ? requested : 'accounts';
 
   function draw() {
     renderPage(
@@ -82,9 +97,14 @@ export async function renderSettings(context) {
         { class: 'tabs', role: 'tablist', 'aria-label': 'Settings sections' },
         tabButton('accounts', 'Accounts'),
         tabButton('categories', 'Categories'),
+        tabButton('business', 'Business details'),
       ),
 
-      tab === 'accounts' ? accountsPanel() : categoriesPanel(),
+      tab === 'accounts'
+        ? accountsPanel()
+        : tab === 'categories'
+          ? categoriesPanel()
+          : businessPanel(),
     );
   }
 
@@ -405,6 +425,87 @@ export async function renderSettings(context) {
       }),
       errorBox,
       submit,
+    );
+  }
+
+  /* ---------------------------------------------------------------------
+     Business details — what appears at the top of a printed ledger
+     --------------------------------------------------------------------- */
+
+  function businessPanel() {
+    const { workspaceId } = getState();
+    const form = { ...workspaceDetails };
+    const errorBox = el('div', {});
+    const submit = el('button', { class: 'btn btn--primary', type: 'submit' }, 'Save details');
+
+    async function onSubmit(event) {
+      event.preventDefault();
+      setFormError(errorBox, null);
+      const restore = setBusy(submit, 'Saving…');
+      try {
+        await saveWorkspaceDetails(workspaceId, form);
+        workspaceDetails = { ...form };
+        toast('Business details saved. They appear on every printed page.');
+        restore();
+      } catch (error) {
+        setFormError(
+          errorBox,
+          error?.message ?? 'Could not save. Only a Super Admin can change these.',
+        );
+        restore();
+      }
+    }
+
+    return el(
+      'div',
+      { class: 'stack stack--loose', role: 'tabpanel' },
+      el(
+        'div',
+        { class: 'alert alert--info' },
+        'These appear at the top of the printed daily ledger — the page you hand to an accountant or a partner. Leave anything blank and it is simply left off.',
+      ),
+      el(
+        'form',
+        { class: 'stack form-page', novalidate: true, onSubmit },
+        field({
+          label: 'Business name',
+          control: textInput({
+            value: form.businessName,
+            maxlength: 120,
+            placeholder: 'Patel Traders',
+            onInput: (v) => { form.businessName = v; },
+          }),
+          hint: 'Printed largest, at the top left. Falls back to the workspace name.',
+        }),
+        field({
+          label: 'Address',
+          control: textArea({
+            value: form.address,
+            maxlength: 300,
+            placeholder: '12 Station Road\nRajkot 360001',
+            onInput: (v) => { form.address = v; },
+          }),
+        }),
+        field({
+          label: 'Phone',
+          control: textInput({
+            value: form.contactPhone,
+            maxlength: 40,
+            onInput: (v) => { form.contactPhone = v; },
+          }),
+        }),
+        field({
+          label: 'Email',
+          control: textInput({
+            value: form.contactEmail,
+            maxlength: 120,
+            type: 'email',
+            onInput: (v) => { form.contactEmail = v; },
+          }),
+        }),
+        errorBox,
+        submit,
+      ),
     );
   }
 

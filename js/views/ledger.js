@@ -261,7 +261,7 @@ function ledgerTable(confirmedWithRunning, drafts, position) {
 
   return el(
     'table',
-    { class: 'ledger-table', 'aria-label': 'Entries for this date' },
+    { class: 'ledger-table ledger-table--sticky', 'aria-label': 'Entries for this date' },
     el(
       'thead',
       {},

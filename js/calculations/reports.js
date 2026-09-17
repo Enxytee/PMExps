@@ -166,7 +166,19 @@ function toLedgerRow(entry) {
  * @returns {Report}
  */
 export function buildEntriesReport({ entries, accounts, from, to, title }) {
-  const rows = reportable(entries).map(toLedgerRow);
+  // Oldest first, and within a day in the order entries were created. A
+  // ledger is read downward like a paper book; Firestore's natural order is
+  // whatever the index happened to return, which makes two rows of the same
+  // transfer appear pages apart.
+  const ordered = [...reportable(entries)].sort((a, b) => {
+    const byDate = a.ledgerDate.localeCompare(b.ledgerDate);
+    if (byDate !== 0) return byDate;
+    const aVoucher = a.voucherNumber ?? '';
+    const bVoucher = b.voucherNumber ?? '';
+    return aVoucher.localeCompare(bVoucher);
+  });
+
+  const rows = ordered.map(toLedgerRow);
   const sums = summariseEntries(entries);
 
   // Opening balance for the span is everything that happened before it.

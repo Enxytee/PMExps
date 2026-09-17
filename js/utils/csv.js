@@ -30,6 +30,19 @@ import { paiseToInputString } from './money.js';
 const FORMULA_STARTERS = ['=', '+', '-', '@', '\t', '\r'];
 
 /**
+ * A plain number, including a negative one: -500.00, 1250, 0.05
+ *
+ * This exists because the naive injection guard broke real data. A negative
+ * amount starts with '-', so it was prefixed with an apostrophe and arrived
+ * in Excel as TEXT — invisible in a column sum, and silently wrong. Reversals
+ * and party accounts that owe money are both routinely negative, so this hit
+ * exactly the figures a reader is most likely to be checking.
+ *
+ * A bare number can never be a formula, so it is safe to leave alone.
+ */
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+
+/**
  * Escape one value for a CSV cell.
  * @param {unknown} value
  * @returns {string}
@@ -40,8 +53,9 @@ export function escapeCell(value) {
   let text = String(value);
 
   // Neutralise formulas before quoting, so the apostrophe ends up inside the
-  // quoted field where a spreadsheet will see it.
-  if (FORMULA_STARTERS.some((char) => text.startsWith(char))) {
+  // quoted field where a spreadsheet will see it. Numbers are exempt: see
+  // PLAIN_NUMBER above.
+  if (!PLAIN_NUMBER.test(text) && FORMULA_STARTERS.some((char) => text.startsWith(char))) {
     text = `'${text}`;
   }
 

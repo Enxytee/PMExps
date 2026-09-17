@@ -165,12 +165,29 @@ describe('CSV export', () => {
     expect(escapeCell('line1\nline2')).toBe('"line1\nline2"');
   });
 
-  it.each(['=1+1', '+SUM(A1)', '-2+3', '@SUM(A1)'])(
+  it.each(['=1+1', '+SUM(A1)', '-2+3', '@SUM(A1)', '-1+cmd|', '=cmd|'])(
     'neutralises the formula %s so a spreadsheet cannot execute it',
     (payload) => {
       expect(escapeCell(payload).replace(/"/g, '').startsWith("'")).toBe(true);
     },
   );
+
+  it.each(['-500.00', '-1250', '0.05', '125000.50', '-0.01'])(
+    'leaves the plain number %s as a number, not text',
+    (number) => {
+      // The injection guard once prefixed every '-' with an apostrophe, which
+      // turned every negative amount into text. Excel then omitted it from
+      // column sums with no warning — a reversal or a party account in debit
+      // would simply vanish from the total.
+      expect(escapeCell(number)).toBe(number);
+      expect(escapeCell(number).startsWith("'")).toBe(false);
+    },
+  );
+
+  it('still guards something that only looks numeric', () => {
+    expect(escapeCell('-1+1').startsWith("'")).toBe(true);
+    expect(escapeCell('=1').startsWith("'")).toBe(true);
+  });
 
   it('neutralises a real attack payload', () => {
     const attack = '=HYPERLINK("http://evil.example/steal","Click me")';
@@ -267,5 +284,27 @@ describe('columns reconcile with totals', () => {
     // And the running balance agrees with the in/out columns beside it.
     const last = statement.rows[statement.rows.length - 1];
     expect(last.runningPaise).toBe(statement.totals.closingPaise);
+  });
+});
+
+describe('row ordering', () => {
+  it('reads oldest first, and keeps a transfer pair together', () => {
+    const report = buildEntriesReport({
+      entries: [
+        e({ ledgerDate: '2026-05-20', voucherNumber: 'INC-2026-00003' }),
+        e({ ledgerDate: '2026-05-10', voucherNumber: 'TRF-2026-00001', transferId: 't1', transferLeg: 'transferIn' }),
+        e({ ledgerDate: '2026-05-10', voucherNumber: 'INC-2026-00001' }),
+        e({ ledgerDate: '2026-05-10', voucherNumber: 'TRF-2026-00001', transferId: 't1', transferLeg: 'transferOut', type: 'expense' }),
+      ],
+      accounts, from: '2026-05-01', to: '2026-05-31', title: 'Ledger',
+    });
+
+    expect(report.rows.map((r) => r.ledgerDate)).toEqual([
+      '2026-05-10', '2026-05-10', '2026-05-10', '2026-05-20',
+    ]);
+    // Both legs of TRF-2026-00001 sit next to each other, not pages apart.
+    const vouchers = report.rows.map((r) => r.voucherNumber);
+    expect(vouchers.indexOf('TRF-2026-00001')).toBe(1);
+    expect(vouchers.lastIndexOf('TRF-2026-00001')).toBe(2);
   });
 });

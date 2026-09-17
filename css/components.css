@@ -291,10 +291,13 @@
   font-size: var(--text-sm);
 }
 
+/* The header is NOT sticky by default.
+   It was, and it overlapped the first body row on the reports screen — the
+   row was rendered and exported but invisible on screen, which is the worst
+   kind of display bug: the totals still added up, so nothing looked wrong.
+   Stickiness is now opt-in, on the daily ledger where the table is the whole
+   page and there is no wrapper to interfere. */
 .ledger-table thead th {
-  position: sticky;
-  top: var(--topbar-height);
-  z-index: 1;
   background: var(--surface-3);
   padding: var(--space-3) var(--space-4);
   text-align: left;
@@ -302,6 +305,18 @@
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);
   border-bottom: var(--border-width) solid var(--border-default);
+}
+
+.ledger-table--sticky thead th {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 1;
+}
+
+@media (max-width: 1023px) {
+  .ledger-table--sticky thead th {
+    top: calc(var(--topbar-height) + var(--safe-top));
+  }
 }
 
 .ledger-table tbody td {

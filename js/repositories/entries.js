@@ -326,3 +326,30 @@ function emptyToNull(value) {
   const text = String(value ?? '').trim();
   return text === '' ? null : text;
 }
+
+/**
+ * Every entry up to and including a date, for balance calculations.
+ *
+ * This is the read that grows with the ledger. It is bounded for now and will
+ * be replaced by date-range paging plus cached opening balances in Phase 6,
+ * once there is enough history for the difference to matter.
+ *
+ * @param {string} workspaceId
+ * @param {string} ledgerDate inclusive upper bound
+ * @param {number} [max]
+ * @returns {Promise<any[]>}
+ */
+export async function listUpTo(workspaceId, ledgerDate, max = 2000) {
+  const snapshot = await getDocs(
+    query(
+      entriesRef(workspaceId),
+      where('ledgerDate', '<=', ledgerDate),
+      orderBy('ledgerDate', 'desc'),
+      limit(max),
+    ),
+  );
+
+  return snapshot.docs
+    .map((d) => d.data())
+    .filter((entry) => entry.status !== ENTRY_STATUS.VOID_DRAFT);
+}

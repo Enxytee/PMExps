@@ -67,21 +67,41 @@ service cloud.firestore {
       return memberDoc(wid).role;
     }
 
+    // These are written as single expressions rather than by composing
+    // isMember() with memberRole(), because every get() and exists() counts
+    // against a hard limit — 10 document accesses for a normal request, 20
+    // across a whole transaction. Composing them re-read the member document
+    // two or three times per check, and a confirmation transaction evaluates
+    // rules for three documents at once. The naive version came close enough
+    // to the ceiling to fail under a slightly larger transaction later.
+
     function isSuperAdmin(wid) {
-      return isMember(wid) && memberRole(wid) == 'superAdmin';
+      return isSignedIn()
+        && exists(memberPath(wid))
+        && memberDoc(wid).status == 'active'
+        && memberDoc(wid).role == 'superAdmin';
     }
 
     function isAccountant(wid) {
-      return isMember(wid) && memberRole(wid) == 'accountant';
+      return isSignedIn()
+        && exists(memberPath(wid))
+        && memberDoc(wid).status == 'active'
+        && memberDoc(wid).role == 'accountant';
     }
 
     function isViewer(wid) {
-      return isMember(wid) && memberRole(wid) == 'viewer';
+      return isSignedIn()
+        && exists(memberPath(wid))
+        && memberDoc(wid).status == 'active'
+        && memberDoc(wid).role == 'viewer';
     }
 
-    // Anyone who may originate a financial draft.
+    // Anyone who may originate or confirm a financial entry.
     function canWriteEntries(wid) {
-      return isSuperAdmin(wid) || isAccountant(wid);
+      return isSignedIn()
+        && exists(memberPath(wid))
+        && memberDoc(wid).status == 'active'
+        && memberDoc(wid).role in ['superAdmin', 'accountant'];
     }
 
     // ---------------------------------------------------------------------
@@ -459,9 +479,77 @@ service cloud.firestore {
           && (isSuperAdmin(wid) || existing().enteredBy == request.auth.uid)
           && hasServerUpdatedAt();
 
+        // -------------------------------------------------------------
+        // CONFIRMATION — draft becomes confirmed.
+        //
+        // This is the rule that makes browser-issued confirmation safe
+        // without a trusted server. Five things must hold together:
+        //
+        //   1. The status moves draft -> confirmed, nothing else.
+        //   2. Every financial field is byte-identical to the draft. An
+        //      amount or date cannot be altered on the way through.
+        //   3. The voucher number equals the counter's value AFTER this
+        //      same commit. getAfter() is what ties the two documents
+        //      together: the number cannot be invented, and it cannot be
+        //      reused, because the counter rule only allows +1.
+        //   4. confirmedAt is the server's clock, not the device's.
+        //   5. The ledger date is not in a closed period.
+        // -------------------------------------------------------------
+
+        function counterPath(prefix, year) {
+          return /databases/$(database)/documents/workspaces/$(wid)/voucherCounters/$(prefix + '-' + year);
+        }
+
+        function expectedPrefix() {
+          return existing().type == 'income' ? 'INC' : 'EXP';
+        }
+
+        // The number the counter will hold once this transaction commits.
+        function committedSequence() {
+          return getAfter(counterPath(expectedPrefix(), existing().financialYear)).data.lastNumber;
+        }
+
+        // 5-digit zero padding, expressed as string concatenation because
+        // rules have no printf. Sequences above 99999 in one financial year
+        // are refused rather than silently mis-padded.
+        function padded(n) {
+          return n < 10 ? '0000' + string(n)
+            : n < 100 ? '000' + string(n)
+            : n < 1000 ? '00' + string(n)
+            : n < 10000 ? '0' + string(n)
+            : n < 100000 ? string(n)
+            : 'OVERFLOW';
+        }
+
+        function expectedVoucher() {
+          return expectedPrefix() + '-' + existing().financialYear + '-' + padded(committedSequence());
+        }
+
+        // Fields that must not move during confirmation.
+        function financialFieldsUnchanged() {
+          return untouched([
+            'entryId', 'workspaceId', 'ledgerDate', 'financialYear', 'type',
+            'categoryId', 'categoryNameSnapshot', 'accountId',
+            'accountNameSnapshot', 'description', 'partyName', 'paymentMode',
+            'amountPaise', 'referenceNumber', 'remarks', 'attachments',
+            'enteredBy', 'enteredByName', 'clientRequestId', 'createdAt',
+            'correctionOf', 'reversalOf', 'transferId', 'transferLeg'
+          ].toSet());
+        }
+
+        allow update: if canWriteEntries(wid)
+          && existing().status == 'draft'
+          && incoming().status == 'confirmed'
+          && financialFieldsUnchanged()
+          && incoming().voucherNumber == expectedVoucher()
+          && incoming().confirmedBy == request.auth.uid
+          && incoming().confirmedAt == request.time
+          && !isDateLocked(wid, existing().ledgerDate)
+          && hasServerUpdatedAt();
+
         // Nothing financial is ever deleted. Drafts are retired to
-        // 'voidDraft' through the update path above being replaced by the
-        // voidDraft function, keeping a recoverable record.
+        // 'voidDraft' through the update path above, keeping a recoverable
+        // record rather than removing one.
         allow delete: if false;
       }
 
@@ -554,7 +642,23 @@ service cloud.firestore {
         allow get, list: if isSuperAdmin(wid)
           || (isAccountant(wid) && resource.data.actorUid == request.auth.uid);
 
-        allow create, update, delete: if false;
+        // Append-only. A member may add a row describing their own action,
+        // and nobody — at any role — may ever change or remove one.
+        //
+        // actorUid is pinned to the caller so an audit row cannot be written
+        // in someone else's name, and serverTimestamp must be the server's
+        // clock so the ordering of history cannot be forged by a device with
+        // a wrong date.
+        allow create: if isMember(wid)
+          && incoming().workspaceId == wid
+          && incoming().actorUid == request.auth.uid
+          && incoming().actorName is string
+          && incoming().action is string
+          && incoming().entityType is string
+          && incoming().entityId is string
+          && incoming().serverTimestamp == request.time;
+
+        allow update, delete: if false;
       }
 
       // -----------------------------------------------------------------
@@ -572,9 +676,28 @@ service cloud.firestore {
       }
 
       match /voucherCounters/{counterId} {
-        // Not even readable: the next voucher number is not the client's
-        // business, and exposing it invites client-side number generation.
-        allow read, write: if false;
+        // Readable, because without Cloud Functions the confirming client
+        // must read the counter inside its transaction to know the next
+        // number. Reading it grants nothing: the entry rule below checks the
+        // number actually written against this counter's post-commit value.
+        allow get: if isMember(wid);
+        allow list: if false;
+
+        // The only permitted change is an increase of exactly one. A client
+        // cannot set the counter backwards to reuse a number, cannot jump it
+        // to skip a range, and cannot decrement it to free one up.
+        allow create: if canWriteEntries(wid)
+          && incoming().counterId == counterId
+          && incoming().workspaceId == wid
+          && incoming().lastNumber == 1
+          && incoming().prefix in ['INC', 'EXP', 'TRF', 'COR']
+          && incoming().financialYear is string;
+
+        allow update: if canWriteEntries(wid)
+          && incoming().lastNumber == existing().lastNumber + 1
+          && untouched(['counterId', 'workspaceId', 'prefix', 'financialYear'].toSet());
+
+        allow delete: if false;
       }
 
       match /idempotency/{requestId} {

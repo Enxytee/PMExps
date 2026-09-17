@@ -460,3 +460,20 @@
 }
 
 .card.is-inactive { opacity: 0.62; }
+
+/* Ledger opening / closing / draft rows ------------------------------------
+   The draft row is dimmed AND its balance cell says "not counted", because a
+   dimmed row alone does not survive a printout or a colourblind reader. */
+.ledger-row--opening td,
+.ledger-row--closing td {
+  background: var(--surface-3);
+}
+
+.ledger-row--closing td {
+  border-top: var(--border-width-strong) solid var(--border-strong);
+}
+
+.ledger-row--draft td {
+  opacity: 0.72;
+  font-style: italic;
+}

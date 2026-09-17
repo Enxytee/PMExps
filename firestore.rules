@@ -253,6 +253,14 @@ service cloud.firestore {
       // Admin. getAfter() reads the post-commit state of that member doc, so
       // a workspace can never exist without exactly one Super Admin, and the
       // creator cannot make someone else the owner.
+      // Reads the member document being created in this same commit, once.
+      function creatorBecomesSuperAdmin() {
+        let m = getAfter(memberPath(wid)).data;
+        return m.role == 'superAdmin'
+          && m.status == 'active'
+          && m.uid == request.auth.uid;
+      }
+
       allow create: if isSignedIn()
         && incoming().workspaceId == wid
         && incoming().ownerUid == request.auth.uid
@@ -263,9 +271,7 @@ service cloud.firestore {
         && incoming().status == 'active'
         && incoming().memberCount == 1
         && hasServerCreatedAt()
-        && getAfter(memberPath(wid)).data.role == 'superAdmin'
-        && getAfter(memberPath(wid)).data.status == 'active'
-        && getAfter(memberPath(wid)).data.uid == request.auth.uid;
+        && creatorBecomesSuperAdmin();
 
       allow update: if isSuperAdmin(wid)
         && untouched([
@@ -565,6 +571,21 @@ service cloud.firestore {
           return /databases/$(database)/documents/workspaces/$(wid)/transfers/$(tid);
         }
 
+        // The parent transfer is read once. It must, after this commit, name
+        // this exact entry as the matching leg and agree on amount and date —
+        // so a leg cannot be conjured on its own to move money into an
+        // account, and cannot disagree with the transfer it belongs to.
+        function parentClaimsThisLeg() {
+          let parent = getAfter(transferPath(incoming().transferId)).data;
+          return (
+              incoming().transferLeg == 'transferOut'
+                ? parent.outEntryId == entryId
+                : parent.inEntryId == entryId
+            )
+            && parent.amountPaise == incoming().amountPaise
+            && parent.ledgerDate == incoming().ledgerDate;
+        }
+
         allow create: if canWriteEntries(wid)
           && workspaceIdMatches(wid)
           && incoming().entryId == entryId
@@ -576,14 +597,7 @@ service cloud.firestore {
           && incoming().confirmedBy == request.auth.uid
           && incoming().confirmedAt == request.time
           && !isDateLocked(wid, incoming().ledgerDate)
-          // The parent must claim this leg after the commit.
-          && (
-               incoming().transferLeg == 'transferOut'
-                 ? getAfter(transferPath(incoming().transferId)).data.outEntryId == entryId
-                 : getAfter(transferPath(incoming().transferId)).data.inEntryId == entryId
-             )
-          && getAfter(transferPath(incoming().transferId)).data.amountPaise == incoming().amountPaise
-          && getAfter(transferPath(incoming().transferId)).data.ledgerDate == incoming().ledgerDate
+          && parentClaimsThisLeg()
           && hasServerCreatedAt();
 
         // -------------------------------------------------------------
@@ -616,25 +630,80 @@ service cloud.firestore {
       match /transfers/{transferId} {
         allow get, list: if isMember(wid);
 
+        function legPathFor(entryId) {
+          return /databases/$(database)/documents/workspaces/$(wid)/ledgerEntries/$(entryId);
+        }
+
+        // Shared shape checks for any new transfer.
+        function validTransferShape() {
+          return workspaceIdMatches(wid)
+            && incoming().transferId == transferId
+            && isPositivePaise(incoming().amountPaise)
+            && isLedgerDate(incoming().ledgerDate)
+            && isBoundedString(incoming().fromAccountId, 1, 64)
+            && isBoundedString(incoming().toAccountId, 1, 64)
+            // The one invariant that must hold in every case: money cannot
+            // move to where it already is.
+            && incoming().fromAccountId != incoming().toAccountId
+            && isOptionalString(incoming().description, 200)
+            && isOptionalString(incoming().remarks, 500)
+            && isBoundedString(incoming().clientRequestId, 8, 64)
+            && incoming().createdBy == request.auth.uid
+            && !isDateLocked(wid, incoming().ledgerDate)
+            && hasServerCreatedAt();
+        }
+
+        // A transfer saved for later, moving nothing yet.
         allow create: if canWriteEntries(wid)
-          && workspaceIdMatches(wid)
-          && incoming().transferId == transferId
+          && validTransferShape()
           && incoming().status == 'draft'
-          && isPositivePaise(incoming().amountPaise)
-          && isLedgerDate(incoming().ledgerDate)
-          && isBoundedString(incoming().fromAccountId, 1, 64)
-          && isBoundedString(incoming().toAccountId, 1, 64)
-          // The one invariant that must hold even on a draft.
-          && incoming().fromAccountId != incoming().toAccountId
-          && isOptionalString(incoming().description, 200)
-          && isOptionalString(incoming().remarks, 500)
-          && isBoundedString(incoming().clientRequestId, 8, 64)
           && incoming().voucherNumber == null
           && incoming().outEntryId == null
-          && incoming().inEntryId == null
-          && incoming().createdBy == request.auth.uid
-          && !isDateLocked(wid, incoming().ledgerDate)
-          && hasServerCreatedAt();
+          && incoming().inEntryId == null;
+
+        // -------------------------------------------------------------
+        // A transfer created ALREADY CONFIRMED, with both legs written in
+        // the same commit.
+        //
+        // This is the path the app actually uses. A transfer has no useful
+        // half-state: either the money moved or it did not, so writing it
+        // as a draft and immediately confirming would only create a window
+        // in which the record exists and the balances disagree.
+        //
+        // getAfter() reads each leg's post-commit state, so this rule can
+        // insist the pair balances before allowing the write. Omit a leg,
+        // change one amount, or point a leg at the wrong account, and
+        // getAfter() disagrees and the entire transaction is rejected.
+        // -------------------------------------------------------------
+        // Each leg is read exactly once and bound with `let`. Written as ten
+        // separate getAfter() calls this consumed most of the transaction's
+        // 20-access budget on its own, and the failure would have surfaced as
+        // an opaque limit error rather than a rule refusal.
+        function legsBalance() {
+          let out = getAfter(legPathFor(incoming().outEntryId)).data;
+          let arr = getAfter(legPathFor(incoming().inEntryId)).data;
+          return out.transferId == transferId
+            && arr.transferId == transferId
+            && out.amountPaise == incoming().amountPaise
+            && arr.amountPaise == incoming().amountPaise
+            && out.ledgerDate == incoming().ledgerDate
+            && arr.ledgerDate == incoming().ledgerDate
+            && out.transferLeg == 'transferOut'
+            && arr.transferLeg == 'transferIn'
+            && out.accountId == incoming().fromAccountId
+            && arr.accountId == incoming().toAccountId;
+        }
+
+        allow create: if canWriteEntries(wid)
+          && validTransferShape()
+          && incoming().status == 'confirmed'
+          && incoming().voucherNumber is string
+          && incoming().outEntryId is string
+          && incoming().inEntryId is string
+          && incoming().outEntryId != incoming().inEntryId
+          && incoming().confirmedBy == request.auth.uid
+          && incoming().confirmedAt == request.time
+          && legsBalance();
 
         allow update: if canWriteEntries(wid)
           && existing().status == 'draft'
@@ -648,52 +717,6 @@ service cloud.firestore {
              ].toSet())
           && (isSuperAdmin(wid) || existing().createdBy == request.auth.uid)
           && !isDateLocked(wid, incoming().ledgerDate)
-          && hasServerUpdatedAt();
-
-        // -------------------------------------------------------------
-        // CONFIRMING A TRANSFER
-        //
-        // A confirmed transfer is only meaningful if BOTH legs exist and
-        // carry the same amount. getAfter() reads each leg's post-commit
-        // state, so this rule can require the pair to balance before the
-        // commit is allowed. A client cannot write one leg and skip the
-        // other: doing so leaves getAfter() returning null and the whole
-        // transaction is rejected.
-        //
-        // This is the invariant the specification calls "a partial transfer
-        // must never be stored", enforced by the database rather than by
-        // trusting the code that issued the write.
-        // -------------------------------------------------------------
-
-        function legPath(entryId) {
-          return /databases/$(database)/documents/workspaces/$(wid)/ledgerEntries/$(entryId);
-        }
-
-        allow update: if canWriteEntries(wid)
-          && existing().status == 'draft'
-          && incoming().status == 'confirmed'
-          && untouched([
-               'transferId', 'workspaceId', 'ledgerDate', 'amountPaise',
-               'fromAccountId', 'toAccountId', 'createdBy', 'createdAt',
-               'clientRequestId'
-             ].toSet())
-          && incoming().outEntryId is string
-          && incoming().inEntryId is string
-          && incoming().outEntryId != incoming().inEntryId
-          && incoming().confirmedBy == request.auth.uid
-          && incoming().confirmedAt == request.time
-          && !isDateLocked(wid, existing().ledgerDate)
-          // Both legs must exist after this commit, name this transfer,
-          // carry the identical amount and date, and point in opposite
-          // directions at the two named accounts.
-          && getAfter(legPath(incoming().outEntryId)).data.transferId == transferId
-          && getAfter(legPath(incoming().inEntryId)).data.transferId == transferId
-          && getAfter(legPath(incoming().outEntryId)).data.amountPaise == existing().amountPaise
-          && getAfter(legPath(incoming().inEntryId)).data.amountPaise == existing().amountPaise
-          && getAfter(legPath(incoming().outEntryId)).data.transferLeg == 'transferOut'
-          && getAfter(legPath(incoming().inEntryId)).data.transferLeg == 'transferIn'
-          && getAfter(legPath(incoming().outEntryId)).data.accountId == existing().fromAccountId
-          && getAfter(legPath(incoming().inEntryId)).data.accountId == existing().toAccountId
           && hasServerUpdatedAt();
 
         allow delete: if false;

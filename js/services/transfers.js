@@ -165,14 +165,22 @@ export async function createTransfer(input) {
       { merge: true },
     );
 
-    // ---- The transfer record, created already draft then confirmed in the
-    // same commit, because the rules require a draft-to-confirmed transition
-    // and getAfter() on both legs. Writing it once as 'confirmed' would have
-    // no prior state for the rule to compare against.
+    // ---- The transfer record, written ONCE, already confirmed.
+    //
+    // An earlier version created it as a draft and updated it to confirmed
+    // in the same transaction. That failed, and the reason is worth keeping:
+    // Firestore evaluates a document that did not previously exist against
+    // the CREATE rule, using its final state. So the rule saw a document
+    // being created with status 'confirmed' and a voucher number, matched it
+    // against the draft-create rule, and refused. The update rule holding
+    // the leg checks was never reached.
+    //
+    // Writing it once is also the better model: a transfer has no useful
+    // half-state.
     tx.set(transferRef, {
       transferId: transferRef.id,
       workspaceId,
-      voucherNumber: null,
+      voucherNumber,
       ledgerDate: input.ledgerDate,
       financialYear: fyToken,
       fromAccountId: from.accountId,
@@ -183,26 +191,16 @@ export async function createTransfer(input) {
       referenceNumber: emptyToNull(input.referenceNumber),
       description: String(input.description).trim(),
       remarks: emptyToNull(input.remarks),
-      status: TRANSFER_STATUS.DRAFT,
-      outEntryId: null,
-      inEntryId: null,
+      status: TRANSFER_STATUS.CONFIRMED,
+      outEntryId: outRef.id,
+      inEntryId: inRef.id,
       reversalOfTransferId: null,
       reversedByTransferId: null,
       clientRequestId: requestId,
       createdBy: user.uid,
-      confirmedBy: null,
-      confirmedAt: null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    tx.update(transferRef, {
-      status: TRANSFER_STATUS.CONFIRMED,
-      voucherNumber,
-      outEntryId: outRef.id,
-      inEntryId: inRef.id,
       confirmedBy: user.uid,
       confirmedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
 

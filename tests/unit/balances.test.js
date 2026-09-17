@@ -222,3 +222,39 @@ describe('transfers and reversals', () => {
     expect(r.expensePaise).toBe(0);
   });
 });
+
+describe('correction arithmetic end to end', () => {
+  const acc = [{ accountId: 'cash', name: 'Cash', openingBalancePaise: 0, openingBalanceDate: '2026-04-01', isActive: true }];
+
+  it('original plus reversal plus replacement equals the corrected figure alone', () => {
+    // ₹500 recorded by mistake; it should have been ₹5,000.
+    const original = entry({ entryId: 'e1', type: 'income', amountPaise: 50000, accountId: 'cash' });
+    const reversal = entry({ entryId: 'e2', type: 'income', amountPaise: 50000, accountId: 'cash', reversalOf: 'e1' });
+    const replacement = entry({ entryId: 'e3', type: 'income', amountPaise: 500000, accountId: 'cash', correctionOf: 'e1' });
+
+    const balances = accountBalances(acc, [original, reversal, replacement]);
+    expect(balances[0].closingPaise).toBe(500000);
+
+    const totals = summariseEntries([original, reversal, replacement]);
+    expect(totals.incomePaise).toBe(500000);
+    // The assertion that matters: correcting income must not manufacture
+    // an expense anywhere in the books.
+    expect(totals.expensePaise).toBe(0);
+  });
+
+  it('a reversed transfer leaves every account exactly where it started', () => {
+    const accounts = [
+      { accountId: 'cash', name: 'Cash', openingBalancePaise: 100000, openingBalanceDate: '2026-04-01', isActive: true },
+      { accountId: 'bank', name: 'Bank', openingBalancePaise: 0, openingBalanceDate: '2026-04-01', isActive: true },
+    ];
+    const entries = [
+      entry({ transferId: 't1', transferLeg: 'transferOut', accountId: 'cash', type: 'expense', amountPaise: 50000 }),
+      entry({ transferId: 't1', transferLeg: 'transferIn', accountId: 'bank', type: 'income', amountPaise: 50000 }),
+      entry({ transferId: 't2', transferLeg: 'transferOut', accountId: 'bank', type: 'expense', amountPaise: 50000 }),
+      entry({ transferId: 't2', transferLeg: 'transferIn', accountId: 'cash', type: 'income', amountPaise: 50000 }),
+    ];
+    const balances = accountBalances(accounts, entries);
+    expect(balances.find((b) => b.accountId === 'cash').closingPaise).toBe(100000);
+    expect(balances.find((b) => b.accountId === 'bank').closingPaise).toBe(0);
+  });
+});

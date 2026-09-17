@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   { path: '/entry/new', label: 'Add Entry', icon: 'plus', permission: PERMISSION.CREATE_DRAFT },
   { path: '/drafts', label: 'Drafts', icon: 'file-pen', permission: PERMISSION.CREATE_DRAFT },
   { path: '/transfer', label: 'Transfer', icon: 'arrow-left-right', permission: PERMISSION.CREATE_DRAFT },
+  { path: '/corrections', label: 'Corrections', icon: 'undo-2' },
   { path: '/settings', label: 'More', icon: 'settings' },
 ];
 
@@ -56,6 +57,7 @@ function icon(name) {
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
     menu: 'M3 6h18M3 12h18M3 18h18',
     'arrow-left-right': 'M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4',
+    'undo-2': 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12H9',
     'scroll-text': 'M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4M19 17V5a2 2 0 0 0-2-2H8M15 8h-5M15 12h-5',
   };
 

@@ -558,6 +558,56 @@ service cloud.firestore {
           && hasServerUpdatedAt();
 
         // -------------------------------------------------------------
+        // REVERSAL ENTRIES
+        //
+        // A reversal undoes a confirmed entry without erasing it. It is
+        // created already confirmed, carries the SAME type and amount as the
+        // entry it undoes, and names it in reversalOf. The balance code flips
+        // the sign for reversals rather than writing them as the opposite
+        // type, so undoing income never inflates the expense total.
+        //
+        // Its voucher comes from the COR counter, checked against the
+        // counter's post-commit value exactly as an ordinary confirmation is.
+        // -------------------------------------------------------------
+
+        function corCounterPath(year) {
+          return /databases/$(database)/documents/workspaces/$(wid)/voucherCounters/$('COR-' + year);
+        }
+
+        function expectedCorVoucher() {
+          let seq = getAfter(corCounterPath(incoming().financialYear)).data.lastNumber;
+          return 'COR-' + incoming().financialYear + '-' + padded(seq);
+        }
+
+        allow create: if isSuperAdmin(wid)
+          && workspaceIdMatches(wid)
+          && incoming().entryId == entryId
+          && incoming().status == 'confirmed'
+          && incoming().reversalOf is string
+          && incoming().correctionRequestId is string
+          && isPositivePaise(incoming().amountPaise)
+          && isLedgerDate(incoming().ledgerDate)
+          && incoming().type in ['income', 'expense']
+          && incoming().voucherNumber == expectedCorVoucher()
+          && incoming().confirmedBy == request.auth.uid
+          && incoming().confirmedAt == request.time
+          && hasServerCreatedAt();
+
+        // -------------------------------------------------------------
+        // MARKING AN ENTRY AS CORRECTED
+        //
+        // The original is never edited and never deleted. The only thing
+        // that may be added to it is a pointer to the reversal that undid
+        // it, so anyone reading the row can follow the trail.
+        // -------------------------------------------------------------
+        allow update: if isSuperAdmin(wid)
+          && existing().status in ['confirmed', 'locked']
+          && changedKeys().hasOnly(['correctedBy', 'correctionRequestId', 'updatedAt'])
+          && incoming().correctedBy is string
+          && existing().correctedBy == null
+          && hasServerUpdatedAt();
+
+        // -------------------------------------------------------------
         // TRANSFER LEGS
         //
         // A leg is created already confirmed, because a half-written
@@ -705,6 +755,16 @@ service cloud.firestore {
           && incoming().confirmedAt == request.time
           && legsBalance();
 
+        // Linking a transfer to the transfer that reverses it. Nothing else
+        // about the original may change.
+        allow update: if isSuperAdmin(wid)
+          && existing().status == 'confirmed'
+          && existing().reversedByTransferId == null
+          && changedKeys().hasOnly(['reversedByTransferId', 'status', 'updatedAt'])
+          && incoming().reversedByTransferId is string
+          && incoming().status in ['confirmed', 'reversed']
+          && hasServerUpdatedAt();
+
         allow update: if canWriteEntries(wid)
           && existing().status == 'draft'
           && incoming().status == 'draft'
@@ -745,12 +805,29 @@ service cloud.firestore {
           && isBoundedString(incoming().clientRequestId, 8, 64)
           && hasServerCreatedAt();
 
-        // The only client update is the requester withdrawing it.
+        // The requester may withdraw their own pending request.
         allow update: if isMember(wid)
           && existing().status == 'pending'
           && existing().requestedBy == request.auth.uid
           && incoming().status == 'cancelled'
           && changedKeys().hasOnly(['status', 'updatedAt'])
+          && hasServerUpdatedAt();
+
+        // A Super Admin reviews it. Approving records which reversal was
+        // written; rejecting records why. Neither may alter what was
+        // originally requested — the proposal a reviewer saw is the proposal
+        // that stays on record.
+        allow update: if isSuperAdmin(wid)
+          && existing().status == 'pending'
+          && incoming().status in ['approved', 'rejected']
+          && untouched([
+               'requestId', 'workspaceId', 'targetType', 'targetId',
+               'targetVoucherNumber', 'originalSummary', 'proposedSummary',
+               'reason', 'requestedBy', 'requestedByName', 'requestedAt',
+               'clientRequestId'
+             ].toSet())
+          && incoming().reviewedBy == request.auth.uid
+          && incoming().reviewedAt == request.time
           && hasServerUpdatedAt();
 
         allow delete: if false;

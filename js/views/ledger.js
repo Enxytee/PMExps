@@ -206,7 +206,26 @@ function ledgerTable(confirmedWithRunning, drafts, position) {
         ),
         el('td', {}, entry.categoryNameSnapshot),
         el('td', {}, entry.accountNameSnapshot),
-        el('td', {}, statusBadge(entry.status)),
+        el(
+          'td',
+          {},
+          statusBadge(entry.status),
+          // A confirmed entry cannot be edited, so the only honest action
+          // offered here is a correction. Once corrected, the link is
+          // replaced by a note pointing at the reversal.
+          entry.correctedBy
+            ? el('span', { class: 'u-text-xs u-text-muted' }, ' corrected')
+            : !entry.transferId &&
+              el(
+                'button',
+                {
+                  class: 'btn btn--ghost u-text-xs',
+                  type: 'button',
+                  onClick: () => goTo(`/correct/${entry.entryId}`),
+                },
+                'Correct',
+              ),
+        ),
         el('td', { class: 'money' }, amountCell(entry)),
         el('td', { class: 'money tnum' }, formatPaise(entry.runningPaise, { symbol: false })),
       ),
@@ -575,7 +594,7 @@ export async function renderDashboard() {
     el(
       'div',
       { class: 'alert alert--info' },
-      'Phase 5 of 10. Transfers, period locking and the audit log are live. Corrections arrive next.',
+      'Phase 6 of 10. Corrections and transfer reversals are live: confirmed entries are never edited, only reversed and replaced on the record.',
     ),
   );
 }

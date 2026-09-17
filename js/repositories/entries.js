@@ -353,3 +353,27 @@ export async function listUpTo(workspaceId, ledgerDate, max = 2000) {
     .map((d) => d.data())
     .filter((entry) => entry.status !== ENTRY_STATUS.VOID_DRAFT);
 }
+
+/**
+ * Entries within a date range, for reports.
+ * @param {string} workspaceId
+ * @param {string} from inclusive
+ * @param {string} to inclusive
+ * @param {number} [max]
+ * @returns {Promise<any[]>}
+ */
+export async function listRange(workspaceId, from, to, max = 3000) {
+  const snapshot = await getDocs(
+    query(
+      entriesRef(workspaceId),
+      where('ledgerDate', '>=', from),
+      where('ledgerDate', '<=', to),
+      orderBy('ledgerDate', 'desc'),
+      limit(max),
+    ),
+  );
+
+  return snapshot.docs
+    .map((d) => d.data())
+    .filter((entry) => entry.status !== ENTRY_STATUS.VOID_DRAFT);
+}

@@ -477,3 +477,23 @@
   opacity: 0.72;
   font-style: italic;
 }
+
+/* Report sheet ------------------------------------------------------------
+   On screen this is an ordinary section. In print it becomes the page: the
+   filter card and app chrome are dropped by print.css, leaving the table,
+   its totals and the notes. */
+.report-sheet {
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+@media print {
+  .report-sheet {
+    background: #fff;
+    border: none;
+    padding: 0;
+  }
+  .report-sheet table { font-size: 9pt; }
+}

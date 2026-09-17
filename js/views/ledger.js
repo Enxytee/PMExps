@@ -594,7 +594,7 @@ export async function renderDashboard() {
     el(
       'div',
       { class: 'alert alert--info' },
-      'Phase 6 of 10. Corrections and transfer reversals are live: confirmed entries are never edited, only reversed and replaced on the record.',
+      'Phase 7 of 10. Reports with CSV export are live. A4 PDF and WhatsApp sharing arrive next.',
     ),
   );
 }

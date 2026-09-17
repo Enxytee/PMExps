@@ -40,6 +40,10 @@ export const STRINGS = {
     transfer: 'Transfer',
     balance: 'Balance',
     remarks: 'Remarks',
+    moneyIn: 'Received',
+    moneyOut: 'Paid',
+    totalIn: 'Total received',
+    totalOut: 'Total paid',
 
     // Totals
     openingBalance: 'Opening balance',
@@ -57,7 +61,7 @@ export const STRINGS = {
     // Empty and notes
     noEntries: 'No entries recorded on this date.',
     transferNote:
-      'Transfers move money between your own accounts. They are not income or expense.',
+      'Received and Paid show every movement of money, including transfers between your own accounts. A transfer appears on both sides and therefore does not change the closing balance.',
     draftNote: 'Drafts are not included. This page shows confirmed entries only.',
 
     // Share
@@ -84,6 +88,10 @@ export const STRINGS = {
     transfer: 'ફેરબદલ',
     balance: 'બાકી',
     remarks: 'નોંધ',
+    moneyIn: 'જમા',
+    moneyOut: 'ઉધાર',
+    totalIn: 'કુલ જમા',
+    totalOut: 'કુલ ઉધાર',
 
     // Totals
     openingBalance: 'શરૂઆતની બાકી',
@@ -101,7 +109,7 @@ export const STRINGS = {
     // Empty and notes
     noEntries: 'આ તારીખે કોઈ નોંધ નથી.',
     transferNote:
-      'ફેરબદલ એટલે પોતાનાં ખાતાં વચ્ચે રકમ ખસેડવી. તે આવક કે ખર્ચ ગણાતી નથી.',
+      'જમા અને ઉધારમાં દરેક રકમની અવરજવર આવે છે, પોતાનાં ખાતાં વચ્ચેની ફેરબદલ સહિત. ફેરબદલ બંને બાજુ દેખાય છે, એટલે આખરી બાકીમાં ફરક પડતો નથી.',
     draftNote: 'અધૂરી નોંધ ગણતરીમાં નથી. આ પાનામાં ફક્ત પાકી નોંધ છે.',
 
     // Share

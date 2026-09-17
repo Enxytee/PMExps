@@ -23,7 +23,6 @@ import { getState, refreshMasterData } from '../state.js';
 import { listByDate, listUpTo } from '../repositories/entries.js';
 import { formatPaise } from '../utils/money.js';
 import {
-  summariseEntries,
   dailyPosition,
   withRunningBalance,
   accountEffect,
@@ -80,13 +79,36 @@ export async function renderPrintDaily(context) {
     const locale = intlLocale(printLocale);
 
     const position = dailyPosition(accounts, history, ledgerDate);
-    const sums = summariseEntries(confirmed);
 
-    const ordered = [...confirmed].sort((a, b) => {
-      const byVoucher = (a.voucherNumber ?? '').localeCompare(b.voucherNumber ?? '');
-      return byVoucher;
-    });
+    const ordered = [...confirmed].sort((a, b) =>
+      (a.voucherNumber ?? '').localeCompare(b.voucherNumber ?? ''),
+    );
     const rows = withRunningBalance(ordered, position.openingPaise);
+
+    // The day's totals are the sum of the columns ON THIS PAGE, not a
+    // separately-derived figure.
+    //
+    // An earlier version took them from summariseEntries(), which excludes
+    // transfers — correct for "what did the business earn", wrong for a day
+    // book whose columns show every movement and whose running balance
+    // includes transfers. The result was a page where adding up the Income
+    // column gave 2,750.50 while the total underneath read 1,750.50.
+    //
+    // A printed page that disagrees with itself is worse than one that shows
+    // a number somebody disputes, because nobody knows which half to believe.
+    const totals = rows.reduce(
+      (acc, entry) => {
+        const effect = accountEffect(entry);
+        if (effect > 0) acc.inPaise += effect;
+        else acc.outPaise += -effect;
+        return acc;
+      },
+      { inPaise: 0, outPaise: 0 },
+    );
+
+    // Closing is opening plus what came in minus what went out. Derived from
+    // the same figures the reader can add up by hand.
+    const closingPaise = position.openingPaise + totals.inPaise - totals.outPaise;
 
     const businessName = workspace.businessName || workspace.name || 'PMExps';
 
@@ -123,7 +145,18 @@ export async function renderPrintDaily(context) {
           ),
           el(
             'button',
-            { class: 'btn', type: 'button', onClick: () => shareOnWhatsApp(sums, position, ledgerDate, businessName, s, locale) },
+            {
+              class: 'btn',
+              type: 'button',
+              onClick: () =>
+                shareOnWhatsApp(
+                  { ...totals, closingPaise, openingPaise: position.openingPaise },
+                  ledgerDate,
+                  businessName,
+                  s,
+                  locale,
+                ),
+            },
             'Share on WhatsApp',
           ),
         ),
@@ -192,8 +225,8 @@ export async function renderPrintDaily(context) {
                   el('th', { scope: 'col' }, s('description')),
                   el('th', { scope: 'col' }, s('account')),
                   el('th', { scope: 'col' }, s('category')),
-                  el('th', { scope: 'col', class: 'money' }, s('income')),
-                  el('th', { scope: 'col', class: 'money' }, s('expense')),
+                  el('th', { scope: 'col', class: 'money' }, s('moneyIn')),
+                  el('th', { scope: 'col', class: 'money' }, s('moneyOut')),
                   el('th', { scope: 'col', class: 'money' }, s('balance')),
                 ),
               ),
@@ -217,15 +250,15 @@ export async function renderPrintDaily(context) {
                   'tr',
                   { class: 'a4-row--total' },
                   el('td', { colspan: '4' }, `${s('dayTotal')} (${rows.length} ${s('entries')})`),
-                  el('td', { class: 'money' }, formatPaise(sums.incomePaise, { symbol: false, locale })),
-                  el('td', { class: 'money' }, formatPaise(sums.expensePaise, { symbol: false, locale })),
+                  el('td', { class: 'money' }, formatPaise(totals.inPaise, { symbol: false, locale })),
+                  el('td', { class: 'money' }, formatPaise(totals.outPaise, { symbol: false, locale })),
                   el('td', {}),
                 ),
                 el(
                   'tr',
                   { class: 'a4-row--closing' },
                   el('td', { colspan: '6' }, s('closingBalance')),
-                  el('td', { class: 'money' }, formatPaise(position.closingPaise, { symbol: false, locale })),
+                  el('td', { class: 'money' }, formatPaise(closingPaise, { symbol: false, locale })),
                 ),
               ),
             ),
@@ -329,15 +362,15 @@ function printRow(entry, s, locale) {
  * usually wants anyway, and the text says plainly that the full page is
  * separate.
  */
-function shareOnWhatsApp(sums, position, ledgerDate, businessName, s, locale) {
+function shareOnWhatsApp(figures, ledgerDate, businessName, s, locale) {
   const lines = [
     `*${businessName}*`,
     `${s('dailyLedger')} — ${formatLedgerDate(ledgerDate, { style: 'medium', locale })}`,
     '',
-    `${s('openingBalance')}: ₹${formatPaise(position.openingPaise, { symbol: false, locale })}`,
-    `${s('totalIncome')}: ₹${formatPaise(sums.incomePaise, { symbol: false, locale })}`,
-    `${s('totalExpense')}: ₹${formatPaise(sums.expensePaise, { symbol: false, locale })}`,
-    `${s('closingBalance')}: ₹${formatPaise(position.closingPaise, { symbol: false, locale })}`,
+    `${s('openingBalance')}: ₹${formatPaise(figures.openingPaise, { symbol: false, locale })}`,
+    `${s('totalIn')}: ₹${formatPaise(figures.inPaise, { symbol: false, locale })}`,
+    `${s('totalOut')}: ₹${formatPaise(figures.outPaise, { symbol: false, locale })}`,
+    `${s('closingBalance')}: ₹${formatPaise(figures.closingPaise, { symbol: false, locale })}`,
   ];
 
   const text = lines.join('\n');

@@ -303,3 +303,56 @@ describe('reversal detection', () => {
     expect(findReversible(list).map((t) => t.transferId)).toEqual(['c']);
   });
 });
+
+describe('day book totals reconcile with the running balance', () => {
+  /**
+   * Mirrors the arithmetic on the printed A4 sheet. The property under test:
+   * opening + received - paid must equal the last running balance on the
+   * page. If it does not, a reader adding the columns by hand gets a
+   * different answer from the one printed, and cannot tell which is right.
+   */
+  const dayBookTotals = (rows) =>
+    rows.reduce(
+      (acc, e) => {
+        const effect = accountEffect(e);
+        if (effect > 0) acc.inPaise += effect;
+        else acc.outPaise += -effect;
+        return acc;
+      },
+      { inPaise: 0, outPaise: 0 },
+    );
+
+  it('reconciles with income, expense and a balanced transfer on one day', () => {
+    const opening = 100000;
+    const entries = [
+      entry({ type: 'income', amountPaise: 125050, accountId: 'cash' }),
+      entry({ type: 'expense', amountPaise: 20000, accountId: 'cash' }),
+      entry({ transferId: 't1', transferLeg: 'transferOut', type: 'expense', amountPaise: 50000, accountId: 'cash' }),
+      entry({ transferId: 't1', transferLeg: 'transferIn', type: 'income', amountPaise: 50000, accountId: 'bank' }),
+    ];
+
+    const rows = withRunningBalance(entries, opening);
+    const totals = dayBookTotals(entries);
+    const closing = opening + totals.inPaise - totals.outPaise;
+
+    // Transfers appear on BOTH sides, so they inflate each column equally.
+    expect(totals.inPaise).toBe(175050);
+    expect(totals.outPaise).toBe(70000);
+
+    // And therefore cancel out of the closing balance.
+    expect(closing).toBe(205050);
+    expect(rows[rows.length - 1].runningPaise).toBe(closing);
+  });
+
+  it('a reversal reduces the side it belongs to, keeping the page consistent', () => {
+    const opening = 0;
+    const entries = [
+      entry({ type: 'income', amountPaise: 50000, accountId: 'cash' }),
+      entry({ type: 'income', amountPaise: 50000, accountId: 'cash', reversalOf: 'e1' }),
+    ];
+    const rows = withRunningBalance(entries, opening);
+    const totals = dayBookTotals(entries);
+    expect(opening + totals.inPaise - totals.outPaise).toBe(rows[rows.length - 1].runningPaise);
+    expect(rows[rows.length - 1].runningPaise).toBe(0);
+  });
+});

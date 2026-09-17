@@ -58,50 +58,54 @@ service cloud.firestore {
 
     // An ACTIVE member. 'invited' and 'deactivated' grant nothing.
     function isMember(wid) {
-      return isSignedIn()
-        && exists(memberPath(wid))
-        && memberDoc(wid).status == 'active';
+      let m = isSignedIn() ? memberOf(wid) : null;
+      return m != null && m.data.status == 'active';
     }
 
     function memberRole(wid) {
       return memberDoc(wid).role;
     }
 
-    // These are written as single expressions rather than by composing
-    // isMember() with memberRole(), because every get() and exists() counts
-    // against a hard limit — 10 document accesses for a normal request, 20
-    // across a whole transaction. Composing them re-read the member document
-    // two or three times per check, and a confirmation transaction evaluates
-    // rules for three documents at once. The naive version came close enough
-    // to the ceiling to fail under a slightly larger transaction later.
+    // Every get() and exists() counts against a hard ceiling: 10 document
+    // accesses for an ordinary request, 20 across an entire transaction.
+    //
+    // A transfer writes five documents at once — the transfer, both ledger
+    // legs, the counter and an audit row — and Firestore evaluates rules for
+    // each. Written naively, with exists() followed by two or three separate
+    // get() calls per check, the role helpers alone consumed the whole budget
+    // and the transaction failed with a limit error rather than a rule error,
+    // which is a miserable thing to debug.
+    //
+    // The `let` binding reads the member document exactly once per call.
+    // get() on a missing document returns null, and the null check short-
+    // circuits before .data is touched, so a non-member is denied rather than
+    // causing an evaluation error.
+
+    function memberOf(wid) {
+      return get(memberPath(wid));
+    }
 
     function isSuperAdmin(wid) {
-      return isSignedIn()
-        && exists(memberPath(wid))
-        && memberDoc(wid).status == 'active'
-        && memberDoc(wid).role == 'superAdmin';
+      let m = isSignedIn() ? memberOf(wid) : null;
+      return m != null && m.data.status == 'active' && m.data.role == 'superAdmin';
     }
 
     function isAccountant(wid) {
-      return isSignedIn()
-        && exists(memberPath(wid))
-        && memberDoc(wid).status == 'active'
-        && memberDoc(wid).role == 'accountant';
+      let m = isSignedIn() ? memberOf(wid) : null;
+      return m != null && m.data.status == 'active' && m.data.role == 'accountant';
     }
 
     function isViewer(wid) {
-      return isSignedIn()
-        && exists(memberPath(wid))
-        && memberDoc(wid).status == 'active'
-        && memberDoc(wid).role == 'viewer';
+      let m = isSignedIn() ? memberOf(wid) : null;
+      return m != null && m.data.status == 'active' && m.data.role == 'viewer';
     }
 
     // Anyone who may originate or confirm a financial entry.
     function canWriteEntries(wid) {
-      return isSignedIn()
-        && exists(memberPath(wid))
-        && memberDoc(wid).status == 'active'
-        && memberDoc(wid).role in ['superAdmin', 'accountant'];
+      let m = isSignedIn() ? memberOf(wid) : null;
+      return m != null
+        && m.data.status == 'active'
+        && m.data.role in ['superAdmin', 'accountant'];
     }
 
     // ---------------------------------------------------------------------
@@ -547,6 +551,57 @@ service cloud.firestore {
           && !isDateLocked(wid, existing().ledgerDate)
           && hasServerUpdatedAt();
 
+        // -------------------------------------------------------------
+        // TRANSFER LEGS
+        //
+        // A leg is created already confirmed, because a half-written
+        // transfer must never exist even momentarily. It is legal only
+        // when the parent transfer document, in this same commit, points
+        // back at this exact entry — so a leg cannot be conjured on its own
+        // to move money into an account.
+        // -------------------------------------------------------------
+
+        function transferPath(tid) {
+          return /databases/$(database)/documents/workspaces/$(wid)/transfers/$(tid);
+        }
+
+        allow create: if canWriteEntries(wid)
+          && workspaceIdMatches(wid)
+          && incoming().entryId == entryId
+          && incoming().status == 'confirmed'
+          && incoming().transferId is string
+          && incoming().transferLeg in ['transferOut', 'transferIn']
+          && isPositivePaise(incoming().amountPaise)
+          && isLedgerDate(incoming().ledgerDate)
+          && incoming().confirmedBy == request.auth.uid
+          && incoming().confirmedAt == request.time
+          && !isDateLocked(wid, incoming().ledgerDate)
+          // The parent must claim this leg after the commit.
+          && (
+               incoming().transferLeg == 'transferOut'
+                 ? getAfter(transferPath(incoming().transferId)).data.outEntryId == entryId
+                 : getAfter(transferPath(incoming().transferId)).data.inEntryId == entryId
+             )
+          && getAfter(transferPath(incoming().transferId)).data.amountPaise == incoming().amountPaise
+          && getAfter(transferPath(incoming().transferId)).data.ledgerDate == incoming().ledgerDate
+          && hasServerCreatedAt();
+
+        // -------------------------------------------------------------
+        // LOCKING
+        //
+        // Closing a period moves confirmed entries to 'locked'. Only a
+        // Super Admin may do it, and nothing about the entry may change
+        // except the lock fields.
+        // -------------------------------------------------------------
+
+        allow update: if isSuperAdmin(wid)
+          && existing().status == 'confirmed'
+          && incoming().status == 'locked'
+          && changedKeys().hasOnly(['status', 'lockedBy', 'lockedAt', 'updatedAt'])
+          && incoming().lockedBy == request.auth.uid
+          && incoming().lockedAt == request.time
+          && hasServerUpdatedAt();
+
         // Nothing financial is ever deleted. Drafts are retired to
         // 'voidDraft' through the update path above, keeping a recoverable
         // record rather than removing one.
@@ -593,6 +648,52 @@ service cloud.firestore {
              ].toSet())
           && (isSuperAdmin(wid) || existing().createdBy == request.auth.uid)
           && !isDateLocked(wid, incoming().ledgerDate)
+          && hasServerUpdatedAt();
+
+        // -------------------------------------------------------------
+        // CONFIRMING A TRANSFER
+        //
+        // A confirmed transfer is only meaningful if BOTH legs exist and
+        // carry the same amount. getAfter() reads each leg's post-commit
+        // state, so this rule can require the pair to balance before the
+        // commit is allowed. A client cannot write one leg and skip the
+        // other: doing so leaves getAfter() returning null and the whole
+        // transaction is rejected.
+        //
+        // This is the invariant the specification calls "a partial transfer
+        // must never be stored", enforced by the database rather than by
+        // trusting the code that issued the write.
+        // -------------------------------------------------------------
+
+        function legPath(entryId) {
+          return /databases/$(database)/documents/workspaces/$(wid)/ledgerEntries/$(entryId);
+        }
+
+        allow update: if canWriteEntries(wid)
+          && existing().status == 'draft'
+          && incoming().status == 'confirmed'
+          && untouched([
+               'transferId', 'workspaceId', 'ledgerDate', 'amountPaise',
+               'fromAccountId', 'toAccountId', 'createdBy', 'createdAt',
+               'clientRequestId'
+             ].toSet())
+          && incoming().outEntryId is string
+          && incoming().inEntryId is string
+          && incoming().outEntryId != incoming().inEntryId
+          && incoming().confirmedBy == request.auth.uid
+          && incoming().confirmedAt == request.time
+          && !isDateLocked(wid, existing().ledgerDate)
+          // Both legs must exist after this commit, name this transfer,
+          // carry the identical amount and date, and point in opposite
+          // directions at the two named accounts.
+          && getAfter(legPath(incoming().outEntryId)).data.transferId == transferId
+          && getAfter(legPath(incoming().inEntryId)).data.transferId == transferId
+          && getAfter(legPath(incoming().outEntryId)).data.amountPaise == existing().amountPaise
+          && getAfter(legPath(incoming().inEntryId)).data.amountPaise == existing().amountPaise
+          && getAfter(legPath(incoming().outEntryId)).data.transferLeg == 'transferOut'
+          && getAfter(legPath(incoming().inEntryId)).data.transferLeg == 'transferIn'
+          && getAfter(legPath(incoming().outEntryId)).data.accountId == existing().fromAccountId
+          && getAfter(legPath(incoming().inEntryId)).data.accountId == existing().toAccountId
           && hasServerUpdatedAt();
 
         allow delete: if false;
@@ -728,6 +829,22 @@ service cloud.firestore {
 
         allow update: if isSuperAdmin(wid)
           && settingsDoc != 'accounting'
+          && hasServerUpdatedAt();
+
+        // The accounting lock date is the one setting with financial force,
+        // so it has its own narrow rule: Super Admin only, only the lock
+        // date itself may move, and the new value must be a real date or
+        // null.
+        //
+        // Note the limit of what rules can check here: they can confirm that
+        // an audit row is written in the same commit, but not that its stated
+        // reason is truthful. Reopening a closed period is therefore visible
+        // in the audit log rather than prevented — which is the correct
+        // trade for a system where a genuine mistake must still be fixable.
+        allow update: if isSuperAdmin(wid)
+          && settingsDoc == 'accounting'
+          && changedKeys().hasOnly(['lockDate', 'updatedAt'])
+          && (incoming().lockDate == null || isLedgerDate(incoming().lockDate))
           && hasServerUpdatedAt();
 
         allow delete: if false;

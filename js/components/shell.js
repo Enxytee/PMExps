@@ -27,6 +27,7 @@ const NAV_ITEMS = [
   { path: '/ledger', label: 'Ledger', icon: 'book-open' },
   { path: '/entry/new', label: 'Add Entry', icon: 'plus', permission: PERMISSION.CREATE_DRAFT },
   { path: '/drafts', label: 'Drafts', icon: 'file-pen', permission: PERMISSION.CREATE_DRAFT },
+  { path: '/transfer', label: 'Transfer', icon: 'arrow-left-right', permission: PERMISSION.CREATE_DRAFT },
   { path: '/settings', label: 'More', icon: 'settings' },
 ];
 
@@ -54,6 +55,8 @@ function icon(name) {
     'file-pen': 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h7M14 2v6h6M21.4 13.6 16 19l-3 1 1-3 5.4-5.4a1.4 1.4 0 1 1 2 2z',
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
     menu: 'M3 6h18M3 12h18M3 18h18',
+    'arrow-left-right': 'M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4',
+    'scroll-text': 'M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4M19 17V5a2 2 0 0 0-2-2H8M15 8h-5M15 12h-5',
   };
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

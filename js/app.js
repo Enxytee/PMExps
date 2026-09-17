@@ -23,6 +23,8 @@ import { ROLE } from './config/constants.js';
 import { renderDashboard, renderLedger, renderDrafts } from './views/ledger.js';
 import { renderEntryForm } from './views/entry-form.js';
 import { renderSettings } from './views/settings.js';
+import { renderTransfer } from './views/transfer.js';
+import { renderAudit } from './views/audit.js';
 import { field, textInput, select, setBusy, setFormError } from './components/ui.js';
 
 /* -------------------------------------------------------------------------
@@ -185,6 +187,8 @@ function registerRoutes() {
     { path: '/drafts', title: 'Drafts', render: renderDrafts, writer: true },
     { path: '/entry/new', title: 'Add entry', render: renderEntryForm, writer: true },
     { path: '/entry/:entryId', title: 'Edit entry', render: renderEntryForm, writer: true },
+    { path: '/transfer', title: 'Transfer', render: renderTransfer, writer: true },
+    { path: '/audit', title: 'Audit log', render: renderAudit },
     { path: '/settings', title: 'Settings', render: renderSettings },
     {
       path: '/404',

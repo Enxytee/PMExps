@@ -575,7 +575,7 @@ export async function renderDashboard() {
     el(
       'div',
       { class: 'alert alert--info' },
-      'Phase 4 of 10. Entries confirm with permanent voucher numbers and running balances. Transfers, corrections and lock dates arrive in Phase 5.',
+      'Phase 5 of 10. Transfers, period locking and the audit log are live. Corrections arrive next.',
     ),
   );
 }

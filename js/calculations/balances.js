@@ -55,8 +55,11 @@ export function summariseEntries(entries) {
   const income = counted.filter((e) => e.type === ENTRY_TYPE.INCOME);
   const expense = counted.filter((e) => e.type === ENTRY_TYPE.EXPENSE);
 
-  const incomePaise = sumBy(income, (e) => e.amountPaise);
-  const expensePaise = sumBy(expense, (e) => e.amountPaise);
+  // Reversals subtract from their own total rather than adding to the other
+  // one, for the same reason as in accountEffect().
+  const signed = (e) => (e.reversalOf ? -e.amountPaise : e.amountPaise);
+  const incomePaise = sumBy(income, signed);
+  const expensePaise = sumBy(expense, signed);
 
   return {
     incomePaise,
@@ -98,10 +101,17 @@ export function summariseDrafts(entries) {
 export function accountEffect(entry) {
   if (!countsTowardBalance(entry)) return 0;
 
-  if (entry.transferLeg === 'transferOut') return -entry.amountPaise;
-  if (entry.transferLeg === 'transferIn') return entry.amountPaise;
+  // A reversal carries the SAME type as the entry it undoes, with a flag,
+  // rather than being written as the opposite type. Reversing ₹100 of income
+  // by recording ₹100 of expense would balance the account correctly but
+  // inflate the expense total and corrupt every category report. The sign is
+  // flipped here instead, where it affects the balance and nothing else.
+  const sign = entry.reversalOf ? -1 : 1;
 
-  return entry.type === ENTRY_TYPE.INCOME ? entry.amountPaise : -entry.amountPaise;
+  if (entry.transferLeg === 'transferOut') return sign * -entry.amountPaise;
+  if (entry.transferLeg === 'transferIn') return sign * entry.amountPaise;
+
+  return sign * (entry.type === ENTRY_TYPE.INCOME ? entry.amountPaise : -entry.amountPaise);
 }
 
 /**

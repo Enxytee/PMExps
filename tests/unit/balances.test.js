@@ -176,3 +176,49 @@ describe('voucher numbers', () => {
     expect(isVoucherNumber('draft')).toBe(false);
   });
 });
+
+describe('transfers and reversals', () => {
+  const acc = [
+    { accountId: 'cash', name: 'Cash', openingBalancePaise: 100000, openingBalanceDate: '2026-04-01', isActive: true },
+    { accountId: 'bank', name: 'Bank', openingBalancePaise: 0, openingBalanceDate: '2026-04-01', isActive: true },
+  ];
+
+  const leg = (over) => entry({ transferId: 't1', status: 'confirmed', ...over });
+
+  it('a transfer moves money without changing the total', () => {
+    const entries = [
+      leg({ transferLeg: 'transferOut', accountId: 'cash', type: 'expense', amountPaise: 40000 }),
+      leg({ transferLeg: 'transferIn', accountId: 'bank', type: 'income', amountPaise: 40000 }),
+    ];
+    const balances = accountBalances(acc, entries);
+    expect(balances.find((b) => b.accountId === 'cash').closingPaise).toBe(60000);
+    expect(balances.find((b) => b.accountId === 'bank').closingPaise).toBe(40000);
+    expect(overallBalance(balances).activePaise).toBe(100000);
+  });
+
+  it('a transfer adds nothing to income or expense totals', () => {
+    const r = summariseEntries([
+      leg({ transferLeg: 'transferOut', accountId: 'cash', type: 'expense', amountPaise: 40000 }),
+      leg({ transferLeg: 'transferIn', accountId: 'bank', type: 'income', amountPaise: 40000 }),
+    ]);
+    expect(r.incomePaise).toBe(0);
+    expect(r.expensePaise).toBe(0);
+  });
+
+  it('a reversal cancels the entry it undoes, leaving the account unchanged', () => {
+    const original = entry({ amountPaise: 75000, accountId: 'cash' });
+    const reversal = entry({ amountPaise: 75000, accountId: 'cash', reversalOf: 'orig-1' });
+    const balances = accountBalances(acc, [original, reversal]);
+    expect(balances.find((b) => b.accountId === 'cash').movementPaise).toBe(0);
+  });
+
+  it('a reversal subtracts from its own total, never inflating the other one', () => {
+    const r = summariseEntries([
+      entry({ type: 'income', amountPaise: 75000 }),
+      entry({ type: 'income', amountPaise: 75000, reversalOf: 'orig-1' }),
+    ]);
+    expect(r.incomePaise).toBe(0);
+    // The critical assertion: reversing income must NOT create an expense.
+    expect(r.expensePaise).toBe(0);
+  });
+});

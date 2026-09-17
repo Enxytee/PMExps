@@ -72,6 +72,9 @@ export async function renderSettings(context) {
       pageHeader({
         title: 'Settings',
         subtitle: 'Accounts and categories for this workspace.',
+        actions: [
+          el('button', { class: 'btn', type: 'button', onClick: () => goTo('/audit') }, 'Audit log & period close'),
+        ],
       }),
 
       el(

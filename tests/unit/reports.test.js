@@ -200,3 +200,72 @@ describe('CSV export', () => {
     expect(sanitiseFileName('')).toBe('pmexps-export');
   });
 });
+
+describe('columns reconcile with totals', () => {
+  /**
+   * The property that matters most in a report: adding up a column on screen
+   * must give the figure printed at the bottom of that column. If it does
+   * not, the report is telling two stories and a reader cannot tell which is
+   * true.
+   */
+  const sumColumn = (report, key) =>
+    report.rows.reduce((sum, row) => sum + (row[key] ?? 0), 0);
+
+  const leg = (over) => e({ transferId: 't1', voucherNumber: 'TRF-2026-00001', ...over });
+
+  const mixed = [
+    e({ amountPaise: 125050 }),
+    e({ type: 'expense', amountPaise: 20000 }),
+    leg({ transferLeg: 'transferOut', accountId: 'cash', type: 'expense', amountPaise: 50000 }),
+    leg({ transferLeg: 'transferIn', accountId: 'bank', type: 'income', amountPaise: 50000 }),
+  ];
+
+  const report = buildEntriesReport({
+    entries: mixed, accounts, from: '2026-05-01', to: '2026-05-31', title: 'Ledger',
+  });
+
+  it('income column adds up to the income total', () => {
+    expect(sumColumn(report, 'incomePaise')).toBe(report.totals.incomePaise);
+    expect(report.totals.incomePaise).toBe(125050);
+  });
+
+  it('expense column adds up to the expense total', () => {
+    expect(sumColumn(report, 'expensePaise')).toBe(report.totals.expensePaise);
+    expect(report.totals.expensePaise).toBe(20000);
+  });
+
+  it('transfer legs stay out of income and expense entirely', () => {
+    const transferRows = report.rows.filter((r) => r.transferId);
+    expect(transferRows).toHaveLength(2);
+    for (const row of transferRows) {
+      expect(row.incomePaise).toBe(0);
+      expect(row.expensePaise).toBe(0);
+    }
+  });
+
+  it('a balanced transfer nets to zero in the transfer column', () => {
+    expect(sumColumn(report, 'transferPaise')).toBe(0);
+    expect(report.totals.transferPaise).toBe(0);
+  });
+
+  it('a transfer missing a leg shows a non-zero transfer total', () => {
+    // This is the integrity check: if the column does not net to zero, a
+    // transfer lost a leg somewhere and the books need looking at.
+    const broken = buildEntriesReport({
+      entries: [leg({ transferLeg: 'transferOut', type: 'expense', amountPaise: 50000 })],
+      accounts, from: '2026-05-01', to: '2026-05-31', title: 'Ledger',
+    });
+    expect(broken.totals.transferPaise).not.toBe(0);
+  });
+
+  it('an account statement DOES show transfers, because they moved that account', () => {
+    const statement = buildAccountStatement({
+      entries: mixed, account: accounts[0], from: '2026-05-01', to: '2026-05-31',
+    });
+    const transferRow = statement.rows.find((r) => r.transferId);
+    expect(transferRow.expensePaise).toBe(50000);
+    // And the running balance agrees with the in/out columns beside it.
+    const last = statement.rows[statement.rows.length - 1];
+    expect(last.runningPaise).toBe(statement.totals.closingPaise);
+  });
+});

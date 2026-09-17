@@ -117,28 +117,46 @@ const ENTRY_COLUMNS = [
   { key: 'description', label: 'Description' },
   { key: 'categoryNameSnapshot', label: 'Category' },
   { key: 'accountNameSnapshot', label: 'Account' },
-  { key: 'paymentMode', label: 'Mode' },
   { key: 'incomePaise', label: 'Income', align: 'right', money: true },
   { key: 'expensePaise', label: 'Expense', align: 'right', money: true },
+  { key: 'transferPaise', label: 'Transfer', align: 'right', money: true },
 ];
 
 /**
- * Split an entry into income and expense columns, the way a ledger prints.
+ * Split an entry into its ledger columns.
+ *
+ * A transfer leg gets its own column and is left OUT of income and expense.
+ * This is not cosmetic. The totals row comes from summariseEntries(), which
+ * excludes transfers; if the rows put transfer amounts under Income, the
+ * column would visibly fail to add up to its own total, and the report would
+ * be telling two different stories about the same money.
+ *
  * A reversal shows as a negative in its own column rather than jumping to the
- * other one, so the columns still add up to the category totals.
+ * other one, for the same reason: reversing income must not read as expense.
+ *
  * @param {Record<string, any>} entry
  */
 function toLedgerRow(entry) {
   const signed = entry.reversalOf ? -entry.amountPaise : entry.amountPaise;
-  const isTransfer = isTransferLeg(entry);
+
+  if (isTransferLeg(entry)) {
+    return {
+      ...entry,
+      voucherNumber: entry.voucherNumber ?? '',
+      categoryNameSnapshot: 'Transfer',
+      incomePaise: 0,
+      expensePaise: 0,
+      // Signed by direction: out of this account is negative, in is positive.
+      transferPaise: entry.transferLeg === 'transferOut' ? -signed : signed,
+    };
+  }
 
   return {
     ...entry,
-    ledgerDate: entry.ledgerDate,
     voucherNumber: entry.voucherNumber ?? '',
-    categoryNameSnapshot: isTransfer ? 'Transfer' : entry.categoryNameSnapshot,
     incomePaise: entry.type === ENTRY_TYPE.INCOME ? signed : 0,
     expensePaise: entry.type === ENTRY_TYPE.EXPENSE ? signed : 0,
+    transferPaise: 0,
   };
 }
 
@@ -165,10 +183,17 @@ export function buildEntriesReport({ entries, accounts, from, to, title }) {
       label: `${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`,
       incomePaise: sums.incomePaise,
       expensePaise: sums.expensePaise,
+      // A balanced pair of transfer legs nets to zero. A non-zero figure here
+      // would mean a transfer had lost a leg, so this column doubles as a
+      // visible integrity check on every ledger report.
+      transferPaise: rows.reduce((sum, row) => sum + (row.transferPaise ?? 0), 0),
       netPaise: sums.netPaise,
       openingPaise,
       closingPaise: openingPaise === null ? null : openingPaise + sums.netPaise,
     },
+    notes: [
+      'Income and Expense exclude transfers between your own accounts. The Transfer column nets to zero when every transfer has both legs.',
+    ],
   };
 }
 
@@ -188,10 +213,22 @@ export function buildAccountStatement({ entries, account, from, to }) {
     .filter((e) => e.ledgerDate >= from && e.ledgerDate <= to)
     .sort((a, b) => a.ledgerDate.localeCompare(b.ledgerDate));
 
-  const rows = withRunningBalance(inRange, openingPaise).map((entry) => ({
-    ...toLedgerRow(entry),
-    runningPaise: entry.runningPaise,
-  }));
+  // Unlike the ledger report, an account statement DOES show transfers in its
+  // In and Out columns: money genuinely entered or left this account, and a
+  // statement that hid it would not reconcile with the running balance beside
+  // it. The direction comes from accountEffect(), so the sign convention is
+  // the same one the balances use.
+  const rows = withRunningBalance(inRange, openingPaise).map((entry) => {
+    const effect = accountEffect(entry);
+    return {
+      ...entry,
+      voucherNumber: entry.voucherNumber ?? '',
+      categoryNameSnapshot: isTransferLeg(entry) ? 'Transfer' : entry.categoryNameSnapshot,
+      incomePaise: effect > 0 ? effect : 0,
+      expensePaise: effect < 0 ? -effect : 0,
+      runningPaise: entry.runningPaise,
+    };
+  });
 
   const movement = inRange.reduce((sum, e) => sum + accountEffect(e), 0);
 

@@ -115,60 +115,77 @@ export async function renderPrintDaily(context) {
     replaceChildren(
       qs('#app'),
 
-      // Controls. Excluded from print by .no-print, so they never appear on
-      // the page that is handed to someone.
+      // Toolbar. A bar of its own above the sheet, not floating over it: the
+      // page below is meant to look exactly like the paper that comes out of
+      // the printer, and anything overlapping it undermines that.
       el(
         'div',
-        { class: 'print-controls no-print' },
-        el(
-          'button',
-          {
-            class: 'btn',
-            type: 'button',
-            onClick: () => { window.location.hash = `#/ledger?date=${ledgerDate}`; },
-          },
-          '← Back',
-        ),
+        { class: 'print-bar no-print' },
         el(
           'div',
-          { class: 'row u-gap-2' },
-          languageButton('en', 'English', s),
-          languageButton('gu', 'ગુજરાતી', s),
-        ),
-        el(
-          'div',
-          { class: 'row u-gap-2' },
-          el(
-            'button',
-            { class: 'btn btn--primary', type: 'button', onClick: () => window.print() },
-            'Print / Save as PDF',
-          ),
+          { class: 'print-bar__inner' },
           el(
             'button',
             {
-              class: 'btn',
+              class: 'btn btn--ghost',
               type: 'button',
-              onClick: () =>
-                shareOnWhatsApp(
-                  { ...totals, closingPaise, openingPaise: position.openingPaise },
-                  ledgerDate,
-                  businessName,
-                  s,
-                  locale,
-                ),
+              onClick: () => { window.location.hash = `#/ledger?date=${ledgerDate}`; },
             },
-            'Share on WhatsApp',
+            '\u2190 Ledger',
+          ),
+
+          el(
+            'div',
+            { class: 'segmented', role: 'radiogroup', 'aria-label': 'Language' },
+            languageOption('en', 'English'),
+            languageOption('gu', '\u0A97\u0AC1\u0A9C\u0AB0\u0ABE\u0AA4\u0AC0'),
+          ),
+
+          el(
+            'div',
+            { class: 'row u-gap-2' },
+            el(
+              'button',
+              { class: 'btn btn--primary', type: 'button', onClick: () => window.print() },
+              'Print / Save as PDF',
+            ),
+            el(
+              'button',
+              {
+                class: 'btn',
+                type: 'button',
+                title: 'Sends the day\u2019s figures as a message',
+                onClick: () =>
+                  shareOnWhatsApp(
+                    { ...totals, closingPaise, openingPaise: position.openingPaise },
+                    ledgerDate,
+                    businessName,
+                    s,
+                    locale,
+                  ),
+              },
+              'Send figures',
+            ),
           ),
         ),
       ),
 
       el(
         'div',
-        { class: 'no-print', style: { 'max-width': '210mm', margin: '0 auto var(--space-4)' } },
+        { class: 'no-print print-tips' },
         el(
           'div',
           { class: 'alert alert--info' },
-          'Press Print, then choose "Save as PDF" as the destination. The controls above are not printed.',
+          el(
+            'div',
+            {},
+            el('p', { class: 'u-weight-medium' }, 'To save as PDF'),
+            el(
+              'p',
+              { class: 'u-text-sm' },
+              'Press Print, set Destination to "Save as PDF", and turn OFF "Headers and footers" so the browser does not print the date and page title along the top.',
+            ),
+          ),
         ),
         draftCount > 0 &&
           el(
@@ -291,14 +308,15 @@ export async function renderPrintDaily(context) {
   }
 
   /** @param {'en'|'gu'} value @param {string} label */
-  function languageButton(value, label) {
-    const isActive = printLocale === value;
+  function languageOption(value, label) {
+    const isSelected = printLocale === value;
     return el(
       'button',
       {
-        class: `btn${isActive ? ' btn--primary' : ''}`,
+        class: `segmented__option${isSelected ? ' is-selected' : ''}`,
         type: 'button',
-        'aria-pressed': String(isActive),
+        role: 'radio',
+        'aria-checked': String(isSelected),
         onClick: () => {
           printLocale = value;
           storeLocale(value);

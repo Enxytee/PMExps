@@ -260,7 +260,7 @@ export async function renderPrintDaily(context) {
                   el('td', { colspan: '6' }, s('openingBalance')),
                   el('td', { class: 'money' }, formatPaise(position.openingPaise, { symbol: false, locale })),
                 ),
-                ...rows.map((entry) => printRow(entry, s, locale)),
+                ...rows.map((entry) => printRow(entry, s, locale, printLocale)),
               ),
               // tfoot repeats on every page in print, so the closing figures
               // are never orphaned from the rows above them.
@@ -343,7 +343,25 @@ export async function renderPrintDaily(context) {
  * @param {(key: string) => string} s
  * @param {string} locale
  */
-function printRow(entry, s, locale) {
+/**
+ * The name to print, preferring the reader's language.
+ *
+ * Falls back to the English snapshot rather than showing a blank cell: a
+ * missing translation should make the page slightly inconsistent, never
+ * unreadable. Older entries have no Gujarati snapshot at all, and they must
+ * still print.
+ *
+ * @param {string|null|undefined} guName
+ * @param {string} enName
+ * @param {'en'|'gu'} printLocale
+ * @returns {string}
+ */
+function localName(guName, enName, printLocale) {
+  if (printLocale === 'gu' && guName) return guName;
+  return enName ?? '';
+}
+
+function printRow(entry, s, locale, printLocale) {
   const effect = accountEffect(entry);
   const inPaise = effect > 0 ? effect : 0;
   const outPaise = effect < 0 ? -effect : 0;
@@ -358,8 +376,14 @@ function printRow(entry, s, locale) {
       entry.description,
       entry.partyName && el('span', { class: 'a4-party' }, ` — ${entry.partyName}`),
     ),
-    el('td', {}, entry.accountNameSnapshot),
-    el('td', {}, isTransferLeg(entry) ? s('transfer') : entry.categoryNameSnapshot),
+    el('td', {}, localName(entry.accountNameGuSnapshot, entry.accountNameSnapshot, printLocale)),
+    el(
+      'td',
+      {},
+      isTransferLeg(entry)
+        ? s('transfer')
+        : localName(entry.categoryNameGuSnapshot, entry.categoryNameSnapshot, printLocale),
+    ),
     el('td', { class: 'money' }, inPaise ? formatPaise(inPaise, { symbol: false, locale }) : ''),
     el('td', { class: 'money' }, outPaise ? formatPaise(outPaise, { symbol: false, locale }) : ''),
     el('td', { class: 'money' }, formatPaise(entry.runningPaise, { symbol: false, locale })),

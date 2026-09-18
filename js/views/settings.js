@@ -155,6 +155,7 @@ export async function renderSettings(context) {
                   'p',
                   { class: 'u-weight-medium' },
                   account.name,
+                  account.nameGu && el('span', { class: 'u-text-muted' }, ` · ${account.nameGu}`),
                   !account.isActive && el('span', { class: 'badge', style: { 'margin-left': 'var(--space-2)' } }, 'Inactive'),
                 ),
                 el(
@@ -163,6 +164,30 @@ export async function renderSettings(context) {
                   `${ACCOUNT_TYPE_LABEL[account.type] ?? account.type} · opening ${formatPaise(account.openingBalancePaise ?? 0)} on ${account.openingBalanceDate}`,
                 ),
                 account.accountNumberMasked && el('p', { class: 'card__meta' }, account.accountNumberMasked),
+              ),
+              el(
+                'button',
+                {
+                  class: 'btn btn--ghost',
+                  type: 'button',
+                  onClick: async () => {
+                    const next = window.prompt(
+                      `Gujarati name for "${account.name}" (leave blank to remove)`,
+                      account.nameGu ?? '',
+                    );
+                    if (next === null) return;
+                    await updateAccount(
+                      getState().workspaceId,
+                      account.accountId,
+                      { nameGu: next.trim() || null },
+                      getState().accounts,
+                    );
+                    await refreshMasterData({ force: true });
+                    toast('Gujarati name saved');
+                    draw();
+                  },
+                },
+                'ગુ name',
               ),
               el(
                 'button',
@@ -200,6 +225,7 @@ export async function renderSettings(context) {
   function accountForm() {
     const form = {
       name: '',
+      nameGu: '',
       type: ACCOUNT_TYPE.BANK,
       bankName: '',
       accountNumber: '',
@@ -245,6 +271,15 @@ export async function renderSettings(context) {
           onInput: (value) => { form.name = value; },
         }),
         error: errors.name,
+      }),
+      field({
+        label: 'Gujarati name',
+        control: textInput({
+          maxlength: 60,
+          placeholder: 'એચડીએફસી ચાલુ ખાતું',
+          onInput: (value) => { form.nameGu = value; },
+        }),
+        hint: 'Optional. Used when the ledger is printed in Gujarati.',
       }),
       field({
         label: 'Type',
@@ -321,6 +356,7 @@ export async function renderSettings(context) {
                     'p',
                     { class: 'u-weight-medium' },
                     category.name,
+                    category.nameGu && el('span', { class: 'u-text-muted' }, ` · ${category.nameGu}`),
                     !category.isActive && el('span', { class: 'badge', style: { 'margin-left': 'var(--space-2)' } }, 'Inactive'),
                   ),
                   el(
@@ -330,6 +366,30 @@ export async function renderSettings(context) {
                       ? `${category.entryCount} entries · type cannot be changed`
                       : 'Not used yet',
                   ),
+                ),
+                el(
+                  'button',
+                  {
+                    class: 'btn btn--ghost',
+                    type: 'button',
+                    onClick: async () => {
+                      const next = window.prompt(
+                        `Gujarati name for "${category.name}" (leave blank to remove)`,
+                        category.nameGu ?? '',
+                      );
+                      if (next === null) return;
+                      await updateCategory(
+                        getState().workspaceId,
+                        category.categoryId,
+                        { nameGu: next.trim() || null },
+                        getState().categories,
+                      );
+                      await refreshMasterData({ force: true });
+                      toast('Gujarati name saved');
+                      draw();
+                    },
+                  },
+                  'ગુ name',
                 ),
                 el(
                   'button',
@@ -369,7 +429,7 @@ export async function renderSettings(context) {
   }
 
   function categoryForm() {
-    const form = { name: '', type: ENTRY_TYPE.EXPENSE };
+    const form = { name: '', nameGu: '', type: ENTRY_TYPE.EXPENSE };
     /** @type {Record<string, string>} */
     let errors = {};
     const errorBox = el('div', {});
@@ -408,6 +468,15 @@ export async function renderSettings(context) {
           onInput: (value) => { form.name = value; },
         }),
         error: errors.name,
+      }),
+      field({
+        label: 'Gujarati name',
+        control: textInput({
+          maxlength: 60,
+          placeholder: 'નૂર અને વાહનવ્યવહાર',
+          onInput: (value) => { form.nameGu = value; },
+        }),
+        hint: 'Optional. Used when the ledger is printed in Gujarati.',
       }),
       field({
         label: 'Type',

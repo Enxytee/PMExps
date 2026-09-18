@@ -307,21 +307,23 @@ export async function seedWorkspace(workspaceId, uid) {
   const today = todayLedgerDate();
   const base = ['workspaces', workspaceId];
 
-  /** Names are English for now; Gujarati labels arrive with localisation. */
+  // Both names are seeded. A workspace created today therefore prints a fully
+  // Gujarati ledger without anyone having to type translations first, and the
+  // English name is still there for anyone who prefers it.
   const accountNames = {
-    cash: 'Cash',
-    bank: 'Bank',
-    upiCard: 'UPI / Card',
-    party: 'Person / Party',
+    cash: { en: 'Cash', gu: 'રોકડ' },
+    bank: { en: 'Bank', gu: 'બેંક' },
+    upiCard: { en: 'UPI / Card', gu: 'UPI / કાર્ડ' },
+    party: { en: 'Person / Party', gu: 'વ્યક્તિ / પાર્ટી' },
   };
 
   const categoryNames = {
-    salesBusinessIncome: 'Sales / Business Income',
-    salaryProfessionalIncome: 'Salary / Professional Income',
-    otherIncome: 'Other Income',
-    householdOfficeExpense: 'Household / Office Expense',
-    billsUtilities: 'Bills & Utilities',
-    travelOtherExpense: 'Travel / Other Expense',
+    salesBusinessIncome: { en: 'Sales / Business Income', gu: 'વેચાણ / ધંધાની આવક' },
+    salaryProfessionalIncome: { en: 'Salary / Professional Income', gu: 'પગાર / વ્યવસાયિક આવક' },
+    otherIncome: { en: 'Other Income', gu: 'અન્ય આવક' },
+    householdOfficeExpense: { en: 'Household / Office Expense', gu: 'ઘર / ઓફિસ ખર્ચ' },
+    billsUtilities: { en: 'Bills & Utilities', gu: 'બિલ અને સુવિધા' },
+    travelOtherExpense: { en: 'Travel / Other Expense', gu: 'મુસાફરી / અન્ય ખર્ચ' },
   };
 
   // Settings
@@ -360,7 +362,8 @@ export async function seedWorkspace(workspaceId, uid) {
     batch.set(ref, {
       accountId: ref.id,
       workspaceId,
-      name: accountNames[account.key],
+      name: accountNames[account.key].en,
+      nameGu: accountNames[account.key].gu,
       type: account.type,
       bankName: null,
       accountNumberMasked: null,
@@ -393,8 +396,8 @@ export async function seedWorkspace(workspaceId, uid) {
     batch.set(ref, {
       categoryId: ref.id,
       workspaceId,
-      name: categoryNames[category.key],
-      nameGu: null,
+      name: categoryNames[category.key].en,
+      nameGu: categoryNames[category.key].gu,
       type: category.type,
       icon: category.icon,
       color: category.color,

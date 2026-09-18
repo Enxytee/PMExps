@@ -50,6 +50,7 @@ export async function createAccount(workspaceId, account, existing) {
     accountId: ref.id,
     workspaceId,
     name: String(account.name).trim(),
+    nameGu: nullIfBlank(account.nameGu),
     type: account.type,
     bankName: nullIfBlank(account.bankName),
     // Only a masked number is ever stored. A full account number in a
@@ -96,6 +97,7 @@ export async function updateAccount(workspaceId, accountId, changes, existing) {
 
   await updateDoc(doc(db, 'workspaces', workspaceId, 'accounts', accountId), {
     name: String(merged.name).trim(),
+    nameGu: nullIfBlank(merged.nameGu),
     type: merged.type,
     bankName: nullIfBlank(merged.bankName),
     accountNumberMasked:

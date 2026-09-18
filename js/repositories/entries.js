@@ -118,8 +118,13 @@ export async function createDraft({
 
     categoryId: entry.categoryId,
     categoryNameSnapshot: category?.name ?? '',
+    // The Gujarati snapshot is frozen alongside the English one. Looking the
+    // translation up at print time would silently change a historical voucher
+    // if someone later renamed the category.
+    categoryNameGuSnapshot: category?.nameGu ?? null,
     accountId: entry.accountId,
     accountNameSnapshot: account?.name ?? '',
+    accountNameGuSnapshot: account?.nameGu ?? null,
 
     description: String(entry.description).trim(),
     partyName: emptyToNull(entry.partyName),
@@ -202,8 +207,10 @@ export async function updateDraft({
     type: entry.type,
     categoryId: entry.categoryId,
     categoryNameSnapshot: category?.name ?? '',
+    categoryNameGuSnapshot: category?.nameGu ?? null,
     accountId: entry.accountId,
     accountNameSnapshot: account?.name ?? '',
+    accountNameGuSnapshot: account?.nameGu ?? null,
     description: String(entry.description).trim(),
     partyName: emptyToNull(entry.partyName),
     paymentMode: entry.paymentMode,

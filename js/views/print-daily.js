@@ -19,6 +19,7 @@
  */
 
 import { el, qs, replaceChildren } from '../utils/dom.js';
+import { navigate } from '../router.js';
 import { getState, refreshMasterData } from '../state.js';
 import { listByDate, listUpTo } from '../repositories/entries.js';
 import { formatPaise } from '../utils/money.js';
@@ -129,7 +130,10 @@ export async function renderPrintDaily(context) {
             {
               class: 'btn btn--ghost',
               type: 'button',
-              onClick: () => { window.location.hash = `#/ledger?date=${ledgerDate}`; },
+              // Uses the router rather than assigning to location.hash, so
+              // the navigation follows the same path as every other link and
+              // cannot drift from it.
+              onClick: () => navigate(`/ledger?date=${ledgerDate}`),
             },
             '\u2190 Ledger',
           ),

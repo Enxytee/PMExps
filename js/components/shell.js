@@ -2,8 +2,11 @@
  * PMExps — App shell
  *
  * The persistent frame: sidebar and top bar on desktop, compact header and
- * bottom navigation on mobile. Screens render into the main region; the frame
- * itself is built once and only its active state changes.
+ * bottom navigation on mobile. Screens render into the main region.
+ *
+ * The frame is normally built once, but renderPage() rebuilds it whenever it
+ * is missing from the document. The print view replaces #app entirely, so
+ * "already built" and "currently present" are not the same thing.
  *
  * @module components/shell
  */
@@ -38,8 +41,6 @@ const ROLE_LABEL = {
   [ROLE.ACCOUNTANT]: 'Accountant',
   [ROLE.VIEWER]: 'Viewer',
 };
-
-let built = false;
 
 /**
  * Icons are drawn inline as simple SVG paths rather than pulled from a
@@ -227,12 +228,12 @@ export function buildShell() {
 
   replaceChildren(app, sidebar, mobileHeader, topbar, main, bottomNav);
   app.dataset.drawer = 'closed';
-  built = true;
 }
 
 /** Re-mark the active navigation item after a route change. */
 export function refreshNavState() {
-  if (!built) return;
+  // Checks the document rather than a flag, for the same reason as above.
+  if (!qs('.app-sidebar')) return;
   const path = currentPath();
 
   for (const link of document.querySelectorAll('.nav-item, .bottomnav__item')) {
@@ -250,12 +251,28 @@ export function refreshNavState() {
 }
 
 /**
- * Render a screen into the main region.
+ * Render a screen into the main region, rebuilding the frame if it is gone.
+ *
+ * The print view replaces the whole of #app — navigation included — because a
+ * page meant to look like paper cannot have a sidebar down its left edge.
+ * Coming back from it, the frame no longer exists, and an earlier version of
+ * this function simply returned when it could not find #main-content. The
+ * result was a Back button that did nothing at all: no error, no navigation,
+ * nothing to debug from.
+ *
+ * So the check is now for the frame actually being present in the document,
+ * not for a flag saying it was built once.
+ *
  * @param {...(Node|string)} children
  */
 export function renderPage(...children) {
-  if (!built) buildShell();
-  const main = qs('#main-content');
+  let main = qs('#main-content');
+
+  if (!main || !qs('.app-sidebar')) {
+    buildShell();
+    main = qs('#main-content');
+  }
+
   if (!main) return;
   replaceChildren(main, el('div', { class: 'page stack stack--loose' }, ...children));
 }

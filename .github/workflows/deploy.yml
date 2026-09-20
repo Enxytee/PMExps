@@ -33,8 +33,10 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Tests
+        # Runs the browser-environment tests too. They caught a Back button
+        # that did nothing, which no unit test would have noticed.
+        run: npm test
 
       - name: Check role names match between rules and client
         run: |

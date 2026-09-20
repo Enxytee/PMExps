@@ -73,7 +73,45 @@ function showError(message) {
   fullPage(
     el('h1', {}, 'Something went wrong'),
     el('div', { class: 'alert alert--danger' }, message),
-    el('button', { class: 'btn', type: 'button', onClick: () => window.location.reload() }, 'Reload'),
+    el(
+      'div',
+      { class: 'row u-gap-2 row--wrap' },
+      el('button', { class: 'btn', type: 'button', onClick: () => window.location.reload() }, 'Reload'),
+
+      // An escape hatch that does not need developer tools.
+      //
+      // The app remembers the last workspace so nobody has to pick it every
+      // time. When that one has been deleted, or the person was removed from
+      // it, every load tries to open it and fails — and without this button
+      // the only way out was the browser console, which is no use to the
+      // person it happens to.
+      el(
+        'button',
+        {
+          class: 'btn',
+          type: 'button',
+          onClick: () => {
+            setActiveWorkspaceId(null);
+            window.location.reload();
+          },
+        },
+        'Choose a different workspace',
+      ),
+
+      el(
+        'button',
+        {
+          class: 'btn btn--ghost',
+          type: 'button',
+          onClick: async () => {
+            setActiveWorkspaceId(null);
+            await signOut();
+            window.location.replace('./login.html');
+          },
+        },
+        'Sign out',
+      ),
+    ),
   );
   announce(message, 'assertive');
 }
@@ -253,7 +291,17 @@ async function boot() {
       return;
     }
 
-    const active = await resolveActiveWorkspace();
+    let active = null;
+    try {
+      active = await resolveActiveWorkspace();
+    } catch (error) {
+      // Belt and braces alongside the soft failures in the service: whatever
+      // goes wrong resolving a remembered workspace, the right destination is
+      // the picker, never an error screen.
+      console.warn('[PMExps] Could not resolve the stored workspace', error);
+      setActiveWorkspaceId(null);
+    }
+
     if (!active) {
       setContext({ user, workspaceId: null, membership: null });
       renderWorkspacePicker(await listMyWorkspaces());

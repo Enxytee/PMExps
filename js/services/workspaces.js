@@ -74,7 +74,15 @@ export async function listMyWorkspaces() {
     where('status', '==', 'active'),
   );
 
-  const membershipSnapshot = await getDocs(membershipQuery);
+  let membershipSnapshot;
+  try {
+    membershipSnapshot = await getDocs(membershipQuery);
+  } catch (error) {
+    // An empty list is the honest answer: this user can open nothing. It puts
+    // them on the picker with a Create form rather than on a dead end.
+    console.warn('[PMExps] Could not list workspaces', error);
+    return [];
+  }
 
   const results = await Promise.all(
     membershipSnapshot.docs.map(async (memberDoc) => {
@@ -82,7 +90,12 @@ export async function listMyWorkspaces() {
       const workspaceRef = memberDoc.ref.parent.parent;
       if (!workspaceRef) return null;
 
-      const workspaceSnapshot = await getDoc(workspaceRef);
+      let workspaceSnapshot;
+      try {
+        workspaceSnapshot = await getDoc(workspaceRef);
+      } catch {
+        return null;
+      }
       if (!workspaceSnapshot.exists()) return null;
 
       const workspace = workspaceSnapshot.data();
@@ -112,13 +125,25 @@ export async function getMembership(workspaceId) {
   const user = currentUser();
   if (!user) return null;
 
-  const snapshot = await getDoc(
-    doc(db, 'workspaces', workspaceId, 'members', user.uid),
-  );
-  if (!snapshot.exists()) return null;
+  try {
+    const snapshot = await getDoc(
+      doc(db, 'workspaces', workspaceId, 'members', user.uid),
+    );
+    if (!snapshot.exists()) return null;
 
-  const membership = snapshot.data();
-  return membership.status === 'active' ? membership : null;
+    const membership = snapshot.data();
+    return membership.status === 'active' ? membership : null;
+  } catch (error) {
+    // A refusal here means "not a member", which is exactly what null says.
+    //
+    // This used to throw. The stored workspace ID is cleared by the caller
+    // when membership comes back null, but a thrown error escaped before that
+    // cleanup ran — so a workspace that had been deleted, or that the user had
+    // been removed from, left the app stuck on "Missing or insufficient
+    // permissions" with no way forward on every single load.
+    if (error?.code === 'permission-denied') return null;
+    throw error;
+  }
 }
 
 /**

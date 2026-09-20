@@ -1,0 +1,132 @@
+# PMExps — test and deploy to GitHub Pages
+#
+# Runs on every push to main. Tests run first; a failure stops the
+# deployment, so a broken build never reaches the live site.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Tests
+        # Runs the browser-environment tests too. They caught a Back button
+        # that did nothing, which no unit test would have noticed.
+        run: npm test
+
+      - name: Check role names match between rules and client
+        run: |
+          for role in superAdmin accountant viewer; do
+            grep -q "$role" firestore.rules \
+              || { echo "::error::Role '$role' missing from firestore.rules"; exit 1; }
+            grep -q "$role" js/config/constants.js \
+              || { echo "::error::Role '$role' missing from constants.js"; exit 1; }
+          done
+          echo "Role names are consistent."
+
+      - name: Assert no credential files are committed
+        run: |
+          # Checks FILE NAMES, not file contents. A content search keeps
+          # matching the pattern written in this very file, which produced a
+          # failure on a perfectly clean repository. Names cannot self-match.
+          if git ls-files | grep -iE 'service[-_]?account.*\.json|serviceAccountKey\.json|\.pem$|id_rsa|\.p12$'; then
+            echo "::error::A credential file appears to be committed. Remove it and rotate the key."
+            exit 1
+          fi
+          echo "No credential files found."
+
+  build:
+    name: Build site
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble publishable site
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'functions' \
+            --exclude 'tests' \
+            --exclude 'scripts' \
+            --exclude 'package.json' \
+            --exclude 'package-lock.json' \
+            --exclude 'firebase.json' \
+            --exclude '.firebaserc*' \
+            --exclude 'firestore.rules' \
+            --exclude 'firestore.indexes.json' \
+            --exclude 'storage.rules' \
+            --exclude '.env*' \
+            --exclude '_site' \
+            ./ _site/
+          touch _site/.nojekyll
+
+      - name: Stamp build version
+        run: |
+          SHA_SHORT="${GITHUB_SHA::7}"
+          sed -i "s/version: '0\.1\.0'/version: '0.1.0+${SHA_SHORT}'/" \
+            _site/js/config/constants.js
+          echo "Stamped build ${SHA_SHORT}"
+
+      - name: Verify entry points exist
+        run: |
+          for f in index.html 404.html manifest.webmanifest \
+                   css/tokens.css js/app.js assets/images/icon-512.png; do
+            test -f "_site/$f" || { echo "::error::Missing $f"; exit 1; }
+          done
+          echo "All entry points present."
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Smoke test the live site
+        run: |
+          URL="${{ steps.deployment.outputs.page_url }}"
+          echo "Deployed to $URL"
+          sleep 10
+          for path in "" "manifest.webmanifest" "css/tokens.css" "js/app.js"; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${URL}${path}")
+            echo "  ${CODE}  ${URL}${path}"
+            [ "$CODE" = "200" ] || { echo "::error::${path} returned ${CODE}"; exit 1; }
+          done
+          echo "Smoke test passed."

@@ -2,71 +2,60 @@
 
 Daily income, expense and transfer ledger for personal, family and
 small-business accounts. Vanilla ES modules on GitHub Pages, Firebase for
-authentication, data, storage and trusted financial operations.
+authentication and data.
+
+Runs entirely on Firebase's free plan. There are no Cloud Functions: the
+operations that would normally need a trusted server — allocating voucher
+numbers, confirming entries, balancing transfers — are client-issued Firestore
+transactions whose invariants are enforced by security rules using
+`getAfter()`.
 
 **Live:** https://enxytee.github.io/PMExps/ · **Firebase project:** `pmexps`
 
-No build step for the frontend. Node tooling is used only for tests, linting,
-Cloud Functions and deployment.
+No build step for the frontend. Node tooling is used only for tests and
+deployment.
 
 ---
 
-## Current status — Phase 1 of 10 complete
+## Status
 
-| Phase | Scope | Status |
-|---|---|---|
-| 1 | Architecture, project structure, design system, Firebase data model | **Done** |
-| 2 | Authentication, workspace membership, role security | Next |
-| 3 | Accounts, categories, ledger drafts | |
-| 4 | Confirmation, voucher numbering, balances | |
-| 5 | Transfers, corrections, lock dates, audit logs | |
-| 6 | Dashboard, reports, filters, exports | |
-| 7 | A4 PDF generation, WhatsApp sharing | |
-| 8 | Offline drafts, PWA, localisation, themes | |
-| 9 | Automated tests, accessibility, security verification | |
-| 10 | GitHub Actions, Pages deployment, documentation, QA | |
+All ten phases built. **169 automated tests pass.**
 
----
+| Phase | Scope | |
+|---|---|:---:|
+| 1 | Architecture, design system, Firebase data model | done |
+| 2 | Authentication, workspaces, role security | done |
+| 3 | Accounts, categories, ledger drafts | done |
+| 4 | Confirmation, voucher numbering, balances | done |
+| 5 | Transfers, period locking, audit log | done |
+| 6 | Corrections and transfer reversals | done |
+| 7 | Eleven reports, CSV export | done |
+| 8 | A4 printable ledger in English and Gujarati, WhatsApp | done |
+| 9 | Offline drafts, PWA, connectivity guards | done |
+| 10 | Documentation and final QA | done |
 
-## What exists right now
+**Read `docs/test-report.md` before trusting this with real money.** It is
+honest about what has not been verified — in particular, the 900 lines of
+security rules that enforce every financial invariant have never been executed
+against the emulator.
 
-```
-css/tokens.css          Design tokens — every colour, size, radius, timing
-css/themes.css          Dark (default) and light palettes
-css/base.css            Reset, typography, focus, a11y primitives, tabular numerals
-css/layout.css          App frame: sidebar + topbar / header + bottom nav
-css/utilities.css       Small utility set
-css/responsive.css      Breakpoints; table becomes cards below 768px
-css/print.css           A4 print rules: repeating headers, no split rows
+## Documentation
 
-js/utils/money.js       Integer-paise arithmetic, parsing, Indian formatting
-js/utils/dates.js       Ledger dates, IST handling, financial years
-js/utils/dom.js         Safe DOM construction, escaping, focus trapping
-js/config/constants.js  Roles, permissions, statuses, transitions, defaults
-js/config/firebase-config.js  Web config for project `pmexps`
+| | |
+|---|---|
+| `docs/user-guide.md` | Recording entries, transfers, corrections, printing |
+| `docs/admin-guide.md` | Roles, setup, closing periods, reviewing corrections |
+| `docs/setup.md` | Building this on a fresh Firebase project |
+| `docs/deployment.md` | GitHub Pages, authorized domains, API key |
+| `docs/security.md` | What protects the data, and the caveats |
+| `docs/backup-recovery.md` | There are no automated backups. Read this one |
+| `docs/data-model.md` | Firestore schema, indexes, transaction boundaries |
+| `docs/test-report.md` | What is tested, what is not, known limitations |
 
-firestore.rules         Production rules: tenant isolation, role enforcement
-storage.rules           Workspace-scoped attachment rules
-firestore.indexes.json  27 composite indexes
-firebase.json           Emulator + deploy configuration
-docs/data-model.md      Full schema: fields, types, indexes, transactions
+## Not built
 
-js/utils/base-path.js   Runtime base path — works at /PMExps/ or a root domain
-js/services/theme.js    Theme switching, persistence, system-theme following
-js/app.js               Bootstrap; reports its own environment for base-path checks
-
-index.html              App shell with pre-paint theme bootstrap and CSP
-404.html                Deep-link recovery for hash routing on Pages
-manifest.webmanifest    PWA manifest with maskable icons and app shortcuts
-assets/images/          Generated icon set (16 to 512, maskable, SVG, ICO)
-
-.github/workflows/test.yml          Unit tests, rule/constant drift check, credential scan
-.github/workflows/deploy-pages.yml  Gated deploy + live smoke test
-docs/deployment.md                  Repo, Pages, authorized domains, key restriction
-tests/unit/money.test.js            53 passing tests
-```
-
----
+Attachments, member invitations, scheduled backups, and automatic PDF
+generation. Each is explained in `docs/test-report.md` under Known limitations.
 
 ## Two things worth reading before Phase 2
 
@@ -88,7 +77,7 @@ rewriting are structurally impossible rather than merely disallowed.
 
 ```bash
 npm install
-npm run test:unit      # 53 tests, no emulator needed
+npm test               # 169 tests, no emulator needed
 npm run dev            # static server on http://localhost:5173
 ```
 

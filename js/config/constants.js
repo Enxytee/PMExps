@@ -29,9 +29,9 @@ export const APP = Object.freeze({
  * tests/unit/phase.test.js keeps `current` and `note` in step.
  */
 export const BUILD_PHASE = Object.freeze({
-  current: 9,
+  current: 10,
   total: 10,
-  note: 'Works offline for drafts, installs as an app, and tells you plainly when an action needs a connection.',
+  note: 'All planned phases are built. See docs/test-report.md for what has and has not been verified.',
 });
 
 /** @returns {string} the banner sentence */

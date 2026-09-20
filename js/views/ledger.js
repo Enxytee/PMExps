@@ -31,7 +31,7 @@ import {
   formatRelativeLedgerDate,
   financialYear,
 } from '../utils/dates.js';
-import { ENTRY_TYPE, ENTRY_STATUS, ROLE } from '../config/constants.js';
+import { ENTRY_TYPE, ENTRY_STATUS, ROLE, phaseBanner } from '../config/constants.js';
 
 const STATUS_LABEL = {
   [ENTRY_STATUS.DRAFT]: 'Draft',
@@ -599,7 +599,7 @@ export async function renderDashboard() {
     el(
       'div',
       { class: 'alert alert--info' },
-      'Phase 8 of 10. The daily ledger prints as an A4 page in English or Gujarati, and shares to WhatsApp.',
+      phaseBanner(),
     ),
   );
 }

@@ -17,6 +17,28 @@ export const APP = Object.freeze({
   version: '0.1.0',
 });
 
+/**
+ * Build progress, shown as a banner while the application is incomplete.
+ *
+ * Declared here, in one place, because it was hard-coded in a view and left
+ * stale three times running — the code shipped correctly and the page claimed
+ * to be a phase behind. A screen telling the user something untrue about
+ * itself is a small lie, but it is the kind that makes people distrust the
+ * parts that matter.
+ *
+ * tests/unit/phase.test.js keeps `current` and `note` in step.
+ */
+export const BUILD_PHASE = Object.freeze({
+  current: 9,
+  total: 10,
+  note: 'Works offline for drafts, installs as an app, and tells you plainly when an action needs a connection.',
+});
+
+/** @returns {string} the banner sentence */
+export function phaseBanner() {
+  return `Phase ${BUILD_PHASE.current} of ${BUILD_PHASE.total}. ${BUILD_PHASE.note}`;
+}
+
 /* -------------------------------------------------------------------------
    Roles
    ------------------------------------------------------------------------- */

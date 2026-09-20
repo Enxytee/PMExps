@@ -205,7 +205,29 @@ export async function renderLedger(context) {
             'div',
             { class: 'empty-state' },
             el('p', { class: 'u-weight-medium' }, 'Nothing recorded on this date'),
-            el('p', { class: 'u-text-sm' }, 'Use Add entry to record income or an expense.'),
+            // The ledger opens on today. Someone entering last month's books
+            // sees an empty page and reasonably concludes their entries are
+            // gone, so say where they are instead of only what is missing.
+            history.length > 0
+              ? el(
+                  'div',
+                  { class: 'stack stack--tight' },
+                  el(
+                    'p',
+                    { class: 'u-text-sm' },
+                    `This workspace has ${history.length} ${history.length === 1 ? 'entry' : 'entries'} on other dates. The most recent is ${formatLedgerDate(history[0].ledgerDate)}.`,
+                  ),
+                  el(
+                    'button',
+                    {
+                      class: 'btn',
+                      type: 'button',
+                      onClick: () => { ledgerDate = history[0].ledgerDate; draw(); },
+                    },
+                    `Go to ${formatLedgerDate(history[0].ledgerDate, { style: 'short' })}`,
+                  ),
+                )
+              : el('p', { class: 'u-text-sm' }, 'Use Add entry to record income or an expense.'),
           )
         : el('div', {}, ledgerTable(withRunning, drafts, position), ledgerCards([...drafts, ...ordered])),
     );
@@ -595,6 +617,28 @@ export async function renderDashboard() {
         el('span', {}, `${drafts.length} draft ${drafts.length === 1 ? 'entry is' : 'entries are'} waiting. Drafts do not affect any balance.`),
         el('button', { class: 'btn', type: 'button', onClick: () => goTo('/drafts') }, 'Review drafts'),
       ),
+
+    (() => {
+      const ignored = balances.filter((b) => b.ignoredBeforeOpeningCount > 0);
+      if (ignored.length === 0) return null;
+
+      const total = ignored.reduce((sum, b) => sum + b.ignoredBeforeOpeningCount, 0);
+
+      return el(
+        'div',
+        { class: 'alert alert--warning row row--between' },
+        el(
+          'span',
+          {},
+          `${total} confirmed ${total === 1 ? 'entry is' : 'entries are'} dated before the opening balance date of ${ignored.map((b) => b.name).join(', ')}, so ${total === 1 ? 'it is' : 'they are'} not counted in that balance. If those entries are real, move the account's opening balance date back in Settings.`,
+        ),
+        el(
+          'button',
+          { class: 'btn', type: 'button', onClick: () => goTo('/settings') },
+          'Open Settings',
+        ),
+      );
+    })(),
 
     el(
       'section',

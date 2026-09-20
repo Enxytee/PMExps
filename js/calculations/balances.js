@@ -160,16 +160,41 @@ export function accountBalances(accounts, entries, options = {}) {
   const { asOf = null } = options;
 
   return accounts.map((account) => {
+    const openingPaise = account.openingBalancePaise ?? 0;
+
+    // The opening-balance date only excludes earlier entries when there IS an
+    // opening balance to protect.
+    //
+    // This rule used to apply unconditionally, and it quietly broke the most
+    // ordinary way of starting: create a workspace today, then enter last
+    // month's transactions. Every account read zero while the category totals
+    // showed the money, because only the balances carried the date cutoff.
+    // Nothing was wrong with the entries and nothing said anything was being
+    // ignored.
+    //
+    // With a zero opening balance there is nothing to double-count, so every
+    // entry counts. With a real opening balance the cutoff still matters: a
+    // figure stated "as at 1 April" already contains everything before it, and
+    // counting those entries again would inflate the account.
+    const hasOpeningFigure = openingPaise !== 0;
+
+    /** Entries for this account that are ignored only because of the date. */
+    const excludedByDate = [];
+
     const relevant = entries.filter((entry) => {
       if (entry.accountId !== account.accountId) return false;
       if (!countsTowardBalance(entry)) return false;
-      if (entry.ledgerDate < account.openingBalanceDate) return false;
       if (asOf && entry.ledgerDate > asOf) return false;
+
+      if (hasOpeningFigure && entry.ledgerDate < account.openingBalanceDate) {
+        excludedByDate.push(entry);
+        return false;
+      }
+
       return true;
     });
 
     const movementPaise = sumBy(relevant, accountEffect);
-    const openingPaise = account.openingBalancePaise ?? 0;
 
     return {
       accountId: account.accountId,
@@ -177,8 +202,13 @@ export function accountBalances(accounts, entries, options = {}) {
       type: account.type,
       isActive: account.isActive !== false,
       openingPaise,
+      openingBalanceDate: account.openingBalanceDate,
       movementPaise,
       closingPaise: openingPaise + movementPaise,
+      // Surfaced so a screen can say so out loud. Dropping entries silently is
+      // what made this hard to spot in the first place.
+      ignoredBeforeOpeningCount: excludedByDate.length,
+      ignoredBeforeOpeningPaise: sumBy(excludedByDate, accountEffect),
     };
   });
 }

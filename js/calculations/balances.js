@@ -31,7 +31,37 @@ import { ENTRY_TYPE, BALANCE_AFFECTING_STATUSES } from '../config/constants.js';
  * @returns {boolean}
  */
 export function countsTowardBalance(entry) {
+  // An entry marked as excluded affects nothing: no balance, no total, no
+  // report, no export. It is still IN the ledger and still visible — the
+  // exclusion removes it from the arithmetic, not from the record.
+  //
+  // That distinction is the whole safeguard. A flag that made an entry
+  // disappear would be deletion wearing a different name, and someone could
+  // make an inconvenient expense vanish with one click. Excluded entries stay
+  // countable, with a permanent tally on screen.
+  if (entry.excludedFromBooks === true) return false;
+
   return BALANCE_AFFECTING_STATUSES.includes(entry.status);
+}
+
+/**
+ * Entries removed from the arithmetic, for the tally the ledger always shows.
+ * @param {Array<Record<string, any>>} entries
+ * @returns {{count: number, incomePaise: number, expensePaise: number}}
+ */
+export function summariseExcluded(entries) {
+  const excluded = entries.filter((e) => e.excludedFromBooks === true);
+  return {
+    count: excluded.length,
+    incomePaise: sumBy(
+      excluded.filter((e) => e.type === ENTRY_TYPE.INCOME),
+      (e) => e.amountPaise,
+    ),
+    expensePaise: sumBy(
+      excluded.filter((e) => e.type === ENTRY_TYPE.EXPENSE),
+      (e) => e.amountPaise,
+    ),
+  };
 }
 
 /** @param {Record<string, any>} entry @returns {boolean} */

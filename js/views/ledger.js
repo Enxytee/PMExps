@@ -11,6 +11,7 @@
 import { el } from '../utils/dom.js';
 import { renderPage, pageHeader, goTo } from '../components/shell.js';
 import { toast, confirmDialog, dateInput, setBusy } from '../components/ui.js';
+import { setExcluded } from '../services/exclusions.js';
 import { getState, refreshMasterData } from '../state.js';
 import { listByDate, listDrafts, listRecent, listUpTo, voidDraft } from '../repositories/entries.js';
 import { confirmEntry, confirmMany, getLockDate } from '../services/confirm.js';
@@ -18,6 +19,7 @@ import { formatPaise } from '../utils/money.js';
 import {
   summariseEntries,
   summariseDrafts,
+  summariseExcluded,
   accountBalances,
   overallBalance,
   dailyPosition,
@@ -90,6 +92,11 @@ export async function renderLedger(context) {
   const { workspaceId, role, accounts } = getState();
   let ledgerDate = context.query.get('date') ?? todayLedgerDate();
 
+  // Excluded entries are hidden by default, because the usual reason for
+  // excluding one is that it was never meant to be there. The count is always
+  // shown, so "hidden" never becomes "gone".
+  let showExcluded = false;
+
   async function draw() {
     const [dayEntries, history, lockDate] = await Promise.all([
       listByDate(workspaceId, ledgerDate),
@@ -97,8 +104,13 @@ export async function renderLedger(context) {
       getLockDate(workspaceId),
     ]);
 
-    const confirmed = dayEntries.filter((e) => e.status !== ENTRY_STATUS.DRAFT);
-    const drafts = dayEntries.filter((e) => e.status === ENTRY_STATUS.DRAFT);
+    const excludedToday = summariseExcluded(dayEntries);
+    const visible = showExcluded
+      ? dayEntries
+      : dayEntries.filter((e) => e.excludedFromBooks !== true);
+
+    const confirmed = visible.filter((e) => e.status !== ENTRY_STATUS.DRAFT);
+    const drafts = visible.filter((e) => e.status === ENTRY_STATUS.DRAFT);
 
     const position = dailyPosition(accounts, history, ledgerDate);
     const sums = summariseEntries(confirmed);
@@ -106,6 +118,8 @@ export async function renderLedger(context) {
 
     // Oldest first so the running balance reads downward the way a paper
     // ledger does.
+    // Excluded entries never enter the running balance, even when shown, so
+    // the Balance column still reconciles with the closing figure.
     const ordered = [...confirmed].reverse();
     const withRunning = withRunningBalance(ordered, position.openingPaise);
 
@@ -158,6 +172,26 @@ export async function renderLedger(context) {
         summaryCard('Closing balance', formatPaise(position.closingPaise), 'Opening + income − expenses'),
       ),
 
+      excludedToday.count > 0 &&
+        el(
+          'div',
+          { class: 'alert alert--info row row--between' },
+          el(
+            'span',
+            {},
+            `${excludedToday.count} ${excludedToday.count === 1 ? 'entry is' : 'entries are'} excluded from the books on this date. They are not counted in any total.`,
+          ),
+          el(
+            'button',
+            {
+              class: 'btn',
+              type: 'button',
+              onClick: () => { showExcluded = !showExcluded; draw(); },
+            },
+            showExcluded ? 'Hide excluded' : 'Show excluded',
+          ),
+        ),
+
       drafts.length > 0 &&
         el(
           'div',
@@ -175,6 +209,42 @@ export async function renderLedger(context) {
           )
         : el('div', {}, ledgerTable(withRunning, drafts, position), ledgerCards([...drafts, ...ordered])),
     );
+  }
+
+  /** @param {Record<string, any>} entry */
+  async function toggleExcluded(entry) {
+    const excluding = entry.excludedFromBooks !== true;
+
+    const ok = await confirmDialog({
+      title: excluding ? 'Exclude this entry from the books?' : 'Put this entry back in the books?',
+      message: excluding
+        ? `"${entry.description}" (${formatPaise(entry.amountPaise)}) will stop counting in every balance, total and report. It STAYS in the ledger, marked as excluded, and the count is shown permanently — this is not a delete. If the entry is real but the figures are wrong, use Correct instead.`
+        : `"${entry.description}" will count in every total again.`,
+      confirmLabel: excluding ? 'Exclude' : 'Restore',
+      destructive: excluding,
+    });
+    if (!ok) return;
+
+    const reason = window.prompt(
+      excluding
+        ? 'Why is this being excluded? (at least 10 characters — recorded permanently)'
+        : 'Why is this being restored? (at least 10 characters)',
+      excluding ? 'Practice entry, not a real transaction' : '',
+    );
+    if (reason === null) return;
+
+    try {
+      await setExcluded({
+        workspaceId,
+        entryId: entry.entryId,
+        excluded: excluding,
+        reason,
+      });
+      toast(excluding ? 'Excluded from the books' : 'Back in the books');
+      draw();
+    } catch (error) {
+      toast(error?.message ?? 'Could not change the entry.', { tone: 'danger', duration: 7000 });
+    }
   }
 
   await draw();
@@ -218,18 +288,32 @@ function ledgerTable(confirmedWithRunning, drafts, position) {
           // A confirmed entry cannot be edited, so the only honest action
           // offered here is a correction. Once corrected, the link is
           // replaced by a note pointing at the reversal.
-          entry.correctedBy
-            ? el('span', { class: 'u-text-xs u-text-muted' }, ' corrected')
-            : !entry.transferId &&
-              el(
-                'button',
-                {
-                  class: 'btn btn--ghost u-text-xs',
-                  type: 'button',
-                  onClick: () => goTo(`/correct/${entry.entryId}`),
-                },
-                'Correct',
-              ),
+          entry.excludedFromBooks
+            ? el('span', { class: 'badge' }, 'Excluded')
+            : entry.correctedBy
+              ? el('span', { class: 'u-text-xs u-text-muted' }, ' corrected')
+              : !entry.transferId &&
+                el(
+                  'button',
+                  {
+                    class: 'btn btn--ghost u-text-xs',
+                    type: 'button',
+                    onClick: () => goTo(`/correct/${entry.entryId}`),
+                  },
+                  'Correct',
+                ),
+          role === ROLE.SUPER_ADMIN &&
+            !entry.transferId &&
+            entry.status === ENTRY_STATUS.CONFIRMED &&
+            el(
+              'button',
+              {
+                class: 'btn btn--ghost u-text-xs',
+                type: 'button',
+                onClick: () => toggleExcluded(entry),
+              },
+              entry.excludedFromBooks ? 'Restore' : 'Exclude',
+            ),
         ),
         el('td', { class: 'money' }, amountCell(entry)),
         el('td', { class: 'money tnum' }, formatPaise(entry.runningPaise, { symbol: false })),

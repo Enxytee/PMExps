@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   summariseEntries, summariseDrafts, accountEffect, accountBalances,
   overallBalance, dailyPosition, withRunningBalance, categoryTotals, monthlyTotals,
+  countsTowardBalance, summariseExcluded,
 } from '../../js/calculations/balances.js';
 import { formatVoucher, counterFor, parseVoucher, isVoucherNumber } from '../../js/utils/voucher.js';
 
@@ -354,5 +355,53 @@ describe('day book totals reconcile with the running balance', () => {
     const totals = dayBookTotals(entries);
     expect(opening + totals.inPaise - totals.outPaise).toBe(rows[rows.length - 1].runningPaise);
     expect(rows[rows.length - 1].runningPaise).toBe(0);
+  });
+});
+
+describe('entries excluded from the books', () => {
+  const acc = [
+    { accountId: 'cash', name: 'Cash', openingBalancePaise: 0, openingBalanceDate: '2026-04-01', isActive: true },
+  ];
+
+  it('an excluded entry counts nowhere', () => {
+    const entries = [
+      entry({ type: 'income', amountPaise: 100000, accountId: 'cash' }),
+      entry({ type: 'income', amountPaise: 999999, accountId: 'cash', excludedFromBooks: true }),
+    ];
+
+    expect(summariseEntries(entries).incomePaise).toBe(100000);
+    expect(accountBalances(acc, entries)[0].closingPaise).toBe(100000);
+    expect(accountEffect(entries[1])).toBe(0);
+    expect(categoryTotals(entries, 'income').reduce((s, c) => s + c.totalPaise, 0)).toBe(100000);
+  });
+
+  it('excluding leaves the day reconciling exactly as if it were never entered', () => {
+    const real = [entry({ type: 'income', amountPaise: 50000, accountId: 'cash' })];
+    const withNoise = [
+      ...real,
+      entry({ type: 'expense', amountPaise: 777777, accountId: 'cash', excludedFromBooks: true }),
+    ];
+
+    expect(dailyPosition(acc, withNoise, '2026-05-10')).toEqual(
+      dailyPosition(acc, real, '2026-05-10'),
+    );
+  });
+
+  it('is reported separately so it is never silently gone', () => {
+    const summary = summariseExcluded([
+      entry({ type: 'income', amountPaise: 30000, excludedFromBooks: true }),
+      entry({ type: 'expense', amountPaise: 12000, excludedFromBooks: true }),
+      entry({ type: 'income', amountPaise: 99999 }),
+    ]);
+
+    expect(summary.count).toBe(2);
+    expect(summary.incomePaise).toBe(30000);
+    expect(summary.expensePaise).toBe(12000);
+  });
+
+  it('the flag is opt-in: an ordinary entry is unaffected', () => {
+    expect(countsTowardBalance(entry({ status: 'confirmed' }))).toBe(true);
+    expect(countsTowardBalance(entry({ status: 'confirmed', excludedFromBooks: false }))).toBe(true);
+    expect(countsTowardBalance(entry({ status: 'confirmed', excludedFromBooks: true }))).toBe(false);
   });
 });

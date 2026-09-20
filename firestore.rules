@@ -594,6 +594,42 @@ service cloud.firestore {
           && hasServerCreatedAt();
 
         // -------------------------------------------------------------
+        // EXCLUDING AN ENTRY FROM THE BOOKS
+        //
+        // For practice data or an entry that should never have existed. It
+        // removes the entry from every total while leaving it in the ledger.
+        //
+        // Super Admin only, a reason is required, and NOTHING else about the
+        // entry may change in the same write — so this cannot be used as a
+        // back door to alter an amount or a date. The client also writes an
+        // audit row in the same transaction; rules cannot compel that, but
+        // they can and do prevent the row being forged or edited afterwards.
+        //
+        // Deliberately not permitted on a locked entry: once a period is
+        // closed, changing what it totals requires reopening it, which is
+        // itself an audited act.
+        // -------------------------------------------------------------
+        allow update: if isSuperAdmin(wid)
+          && existing().status == 'confirmed'
+          && changedKeys().hasOnly([
+               'excludedFromBooks', 'excludeReason', 'excludedBy',
+               'excludedAt', 'updatedAt'
+             ].toSet())
+          && incoming().excludedFromBooks is bool
+          && existing().excludedFromBooks != incoming().excludedFromBooks
+          && (
+               incoming().excludedFromBooks == false
+                 ? incoming().excludeReason == null && incoming().excludedBy == null
+                 : isBoundedString(incoming().excludeReason, 10, 500)
+                   && incoming().excludedBy == request.auth.uid
+                   && incoming().excludedAt == request.time
+             )
+          // A transfer leg cannot be excluded alone: one half of a balanced
+          // pair would create or destroy money. Reverse the transfer instead.
+          && existing().transferId == null
+          && hasServerUpdatedAt();
+
+        // -------------------------------------------------------------
         // MARKING AN ENTRY AS CORRECTED
         //
         // The original is never edited and never deleted. The only thing

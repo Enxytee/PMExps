@@ -28,6 +28,7 @@ import { isDateLocked, financialYear } from '../utils/dates.js';
 import { assertPaise } from '../utils/money.js';
 import { ENTRY_STATUS, TRANSFER_STATUS, TRANSFER_LEG, ERROR_CODE, PAYMENT_MODE } from '../config/constants.js';
 import { newRequestId } from '../repositories/entries.js';
+import { requireOnline } from './connectivity.js';
 
 const { doc, collection, runTransaction, getDocs, query, orderBy, limit, serverTimestamp } = firestore;
 
@@ -111,6 +112,10 @@ export function validateTransfer(input, accounts, lockDate) {
 export async function createTransfer(input) {
   const user = currentUser();
   if (!user) throw new TransferError(ERROR_CODE.UNAUTHENTICATED, 'Sign in first.');
+
+  // Same reason as confirming: a transfer takes a voucher number from a
+  // counter, and it must also write both legs in one server-side commit.
+  requireOnline('Recording a transfer');
 
   const { workspaceId, accounts } = input;
   const from = accounts.find((a) => a.accountId === input.fromAccountId);

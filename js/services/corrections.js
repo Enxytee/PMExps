@@ -36,6 +36,7 @@ import { financialYear } from '../utils/dates.js';
 import { ENTRY_STATUS, CORRECTION_STATUS, ERROR_CODE } from '../config/constants.js';
 import { newRequestId } from '../repositories/entries.js';
 import { createTransfer } from './transfers.js';
+import { requireOnline } from './connectivity.js';
 
 const {
   doc, collection, getDoc, getDocs, query, where, orderBy, limit,
@@ -166,6 +167,9 @@ export async function requestCorrection({ workspaceId, entryId, proposed, reason
 export async function approveCorrection({ workspaceId, requestId }) {
   const user = currentUser();
   if (!user) throw new CorrectionError(ERROR_CODE.UNAUTHENTICATED, 'Sign in first.');
+
+  // Writes a reversal with a voucher number from the COR counter.
+  requireOnline('Approving a correction');
 
   const requestRef = doc(db, 'workspaces', workspaceId, 'correctionRequests', requestId);
 

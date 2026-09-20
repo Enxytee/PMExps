@@ -32,6 +32,7 @@ import { formatVoucher, counterFor } from '../utils/voucher.js';
 import { isDateLocked } from '../utils/dates.js';
 import { ENTRY_STATUS, ERROR_CODE } from '../config/constants.js';
 import { assertPaise } from '../utils/money.js';
+import { requireOnline } from './connectivity.js';
 
 const { doc, runTransaction, serverTimestamp, getDoc } = firestore;
 
@@ -66,6 +67,11 @@ export async function getLockDate(workspaceId) {
 export async function confirmEntry({ workspaceId, entryId }) {
   const user = currentUser();
   if (!user) throw new ConfirmError(ERROR_CODE.UNAUTHENTICATED, 'Sign in first.');
+
+  // Refused rather than queued. Offline, the voucher counter in the local
+  // cache may be stale, and two devices would allocate the same number to
+  // two different entries — a duplicate that is very hard to unpick later.
+  requireOnline('Confirming an entry');
 
   const entryRef = doc(db, 'workspaces', workspaceId, 'ledgerEntries', entryId);
 

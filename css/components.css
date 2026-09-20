@@ -512,3 +512,74 @@
   }
   .report-sheet table { font-size: 9pt; }
 }
+
+/* ==========================================================================
+   Connectivity and updates
+   ========================================================================== */
+
+.offline-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--space-4) + var(--safe-bottom));
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: min(560px, calc(100vw - var(--space-8)));
+  padding: var(--space-3) var(--space-4);
+  background: var(--warning-subtle);
+  border: var(--border-width) solid var(--warning-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: var(--warning-text);
+  font-size: var(--text-sm);
+}
+
+/* A dot as well as the colour, so the state is visible to someone who cannot
+   distinguish the amber. The words carry the meaning either way. */
+.offline-banner__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+@media (max-width: 767px) {
+  .offline-banner {
+    bottom: calc(var(--bottomnav-height) + var(--safe-bottom) + var(--space-3));
+  }
+}
+
+.update-prompt {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(var(--space-4) + var(--safe-bottom));
+  z-index: var(--z-toast);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: min(420px, calc(100vw - var(--space-8)));
+  padding: var(--space-4);
+  background: var(--surface-4);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 767px) {
+  .update-prompt {
+    left: var(--space-4);
+    right: var(--space-4);
+    bottom: calc(var(--bottomnav-height) + var(--safe-bottom) + var(--space-3));
+  }
+}
+
+@media print {
+  .offline-banner,
+  .update-prompt { display: none !important; }
+}

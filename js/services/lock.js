@@ -22,6 +22,7 @@ import { db, firestore } from '../firebase/init.js';
 import { currentUser } from './auth.js';
 import { isLedgerDate, assertLedgerDate } from '../utils/dates.js';
 import { ENTRY_STATUS, ERROR_CODE } from '../config/constants.js';
+import { requireOnline } from './connectivity.js';
 
 const {
   doc, collection, getDoc, getDocs, query, where, orderBy, limit,
@@ -83,6 +84,10 @@ export async function previewLock(workspaceId, throughDate) {
 export async function lockPeriod({ workspaceId, lockDate, reason }) {
   const user = currentUser();
   if (!user) throw new LockError(ERROR_CODE.UNAUTHENTICATED, 'Sign in first.');
+
+  // Closing a period must see every entry, and an offline cache may be
+  // missing entries another device has already written.
+  requireOnline('Closing a period');
 
   if (!isLedgerDate(lockDate)) {
     throw new LockError(ERROR_CODE.VALIDATION_FAILED, 'Choose a valid date.');

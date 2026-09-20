@@ -19,6 +19,7 @@ import {
   createWorkspace,
 } from './services/workspaces.js';
 import { setContext, getState } from './state.js';
+import { initConnectivity, registerServiceWorker } from './services/connectivity.js';
 import { ROLE } from './config/constants.js';
 import { renderDashboard, renderLedger, renderDrafts } from './views/ledger.js';
 import { renderEntryForm } from './views/entry-form.js';
@@ -272,6 +273,13 @@ async function boot() {
 
 setTheme(getPreference(), { animate: false });
 watchSystemTheme();
+initConnectivity();
+
+// Registered after the app has started rather than before, so a slow or
+// failing registration never delays the first paint of the ledger.
+window.addEventListener('load', () => {
+  registerServiceWorker();
+});
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => boot(), { once: true });

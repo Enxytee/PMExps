@@ -43,3 +43,31 @@ describe('strings', () => {
     }
   });
 });
+
+describe('bilingual names on a printed page', () => {
+  /** Mirrors localName() in views/print-daily.js. */
+  const localName = (guName, enName, locale) =>
+    (locale === 'gu' && guName ? guName : (enName ?? ''));
+
+  it('prints the Gujarati name when reading in Gujarati', () => {
+    expect(localName('વેચાણ / ધંધાની આવક', 'Sales / Business Income', 'gu'))
+      .toBe('વેચાણ / ધંધાની આવક');
+  });
+
+  it('prints English when reading in English, even if a Gujarati name exists', () => {
+    expect(localName('વેચાણ / ધંધાની આવક', 'Sales / Business Income', 'en'))
+      .toBe('Sales / Business Income');
+  });
+
+  it('falls back to English when no translation was entered', () => {
+    // Every entry written before this feature existed is in this state, and
+    // must still print rather than leaving a blank cell on a filed document.
+    expect(localName(null, 'Freight', 'gu')).toBe('Freight');
+    expect(localName('', 'Freight', 'gu')).toBe('Freight');
+  });
+
+  it('never returns undefined, which would print as "undefined" on paper', () => {
+    expect(localName(null, undefined, 'gu')).toBe('');
+    expect(localName(undefined, undefined, 'en')).toBe('');
+  });
+});

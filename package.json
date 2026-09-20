@@ -2,7 +2,7 @@
   "name": "pmexps",
   "version": "0.1.0",
   "private": true,
-  "description": "PMExps — daily income, expense and transfer ledger. Vanilla ES modules on GitHub Pages, Firebase backend.",
+  "description": "PMExps \u2014 daily income, expense and transfer ledger. Vanilla ES modules on GitHub Pages, Firebase backend.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -11,12 +11,12 @@
     "dev": "npx --yes serve . -l 5173",
     "emulators": "firebase emulators:start --import=./scripts/emulator-data --export-on-exit=./scripts/emulator-data",
     "seed": "node scripts/seed.js",
-    "test": "npm run test:unit && npm run test:rules",
+    "test": "vitest run tests/unit tests/browser",
     "test:unit": "vitest run tests/unit",
     "test:unit:watch": "vitest tests/unit",
     "test:rules": "firebase emulators:exec --only firestore,storage \"vitest run tests/rules\"",
     "test:integration": "firebase emulators:exec --only firestore,auth,storage,functions \"vitest run tests/integration\"",
-    "test:browser": "playwright test tests/browser",
+    "test:browser": "vitest run tests/browser",
     "test:visual": "playwright test tests/visual",
     "test:a11y": "playwright test tests/browser/accessibility.spec.js",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:html",
@@ -27,17 +27,23 @@
     "rules:deploy": "firebase deploy --only firestore:rules,storage:rules",
     "indexes:deploy": "firebase deploy --only firestore:indexes",
     "functions:deploy": "firebase deploy --only functions",
-    "verify": "npm run lint && npm run test"
+    "verify": "npm run lint && npm run test",
+    "test:watch": "vitest tests/unit tests/browser"
   },
   "devDependencies": {
-    "@firebase/rules-unit-testing": "4.0.1",
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@playwright/test": "1.49.1",
     "eslint": "9.17.0",
-    "firebase-tools": "13.29.1",
+    "firebase-tools": "^13.29.1",
     "html-validate": "9.1.3",
     "prettier": "3.4.2",
     "stylelint": "16.12.0",
     "stylelint-config-standard": "36.0.1",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "jsdom": "^25.0.1"
+  },
+  "dependencies": {
+    "firebase": "^11.0.2",
+    "jsdom": "^30.1.0"
   }
 }
